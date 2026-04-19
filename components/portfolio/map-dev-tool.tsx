@@ -1,0 +1,713 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { Position, StopId } from "@/lib/portfolio-content";
+
+export type DevPolygonKind = "walkable" | "blocked" | "section";
+export type DevToolMode =
+	| "all"
+	| DevPolygonKind
+	| "stop-outline"
+	| "stop-info"
+	| "stop-door"
+	| "stop-exit";
+
+export type DevInteractionMode = "view" | "capture" | "move";
+
+export type DevLayerVisibility = {
+	walkable: boolean;
+	blocked: boolean;
+	sections: boolean;
+	stopOutlines: boolean;
+	stopAnchors: boolean;
+	pointHandles: boolean;
+};
+
+export type DevPolygonDraft = {
+	id: string;
+	kind: DevPolygonKind;
+	points: Position[];
+};
+
+export type DevStopDraft = Partial<{
+	outline: Position[];
+	infoAnchor: Position;
+	door: Position;
+	exit: Position;
+}>;
+
+export type DevMapDrafts = {
+	polygons: DevPolygonDraft[];
+	stops: Partial<Record<StopId, DevStopDraft>>;
+};
+
+const POLYGON_LABELS: Record<DevPolygonKind, string> = {
+	walkable: "Walkable",
+	blocked: "Blocked",
+	section: "Section",
+};
+
+const MODE_DESCRIPTIONS: Record<DevToolMode, { title: string; body: string }> = {
+	all: {
+		title: "Preview Mode",
+		body: "Shows the portfolio the way visitors should read it: clean navigation outlines first, editing layers only if you opt into them.",
+	},
+	walkable: {
+		title: "Walkable Zones",
+		body: "Define where the trainer is allowed to move freely. Use multiple zones to stitch together roads, plazas, and open ground.",
+	},
+	blocked: {
+		title: "Blocked Zones",
+		body: "Mark trees, water, walls, and other areas that should reject movement even when they sit inside a larger walkable field.",
+	},
+	section: {
+		title: "Section Zones",
+		body: "Group larger map regions for debugging, routing, or future narrative overlays without changing the navigation affordances.",
+	},
+	"stop-outline": {
+		title: "Stop Outlines",
+		body: "Trace the clickable border for a destination. These are the dashed shapes visitors hover to discover and enter each room.",
+	},
+	"stop-info": {
+		title: "Info Anchor",
+		body: "Place the tooltip anchor for a stop. Keep it near the building, but leave enough room so the label stays readable.",
+	},
+	"stop-door": {
+		title: "Door Node",
+		body: "This is the entrance target. The trainer walks here before opening the room, so place it at the exact doorway.",
+	},
+	"stop-exit": {
+		title: "Exit Node",
+		body: "This is the spawn point after closing a room. Keep it on a sensible piece of walkable ground just outside the building.",
+	},
+};
+
+const INTERACTION_DESCRIPTIONS: Record<
+	DevInteractionMode,
+	{ title: string; body: string }
+> = {
+	view: {
+		title: "View",
+		body: "Browse the map like a visitor. Hover still reveals destination info, and clicks still open rooms.",
+	},
+	capture: {
+		title: "Capture",
+		body: "Add new points to the current zone or stop target. Use this only in a specific editing mode, not in All Layers.",
+	},
+	move: {
+		title: "Move",
+		body: "Drag existing handles into place without adding more points. Best for polishing outlines, anchors, and travel nodes.",
+	},
+};
+
+function isPolygonMode(mode: DevToolMode): mode is DevPolygonKind {
+	return mode === "walkable" || mode === "blocked" || mode === "section";
+}
+
+function getRelevantLayers(mode: DevToolMode) {
+	if (mode === "all") {
+		return [
+			{ key: "walkable", label: "Walkable zones" },
+			{ key: "blocked", label: "Blocked zones" },
+			{ key: "sections", label: "Section zones" },
+			{ key: "stopOutlines", label: "Stop outlines" },
+		] as const;
+	}
+
+	if (mode === "walkable") {
+		return [
+			{ key: "walkable", label: "Walkable zones" },
+			{ key: "pointHandles", label: "Point handles" },
+		] as const;
+	}
+
+	if (mode === "blocked") {
+		return [
+			{ key: "blocked", label: "Blocked zones" },
+			{ key: "pointHandles", label: "Point handles" },
+		] as const;
+	}
+
+	if (mode === "section") {
+		return [
+			{ key: "sections", label: "Section zones" },
+			{ key: "pointHandles", label: "Point handles" },
+		] as const;
+	}
+
+	if (mode === "stop-outline") {
+		return [
+			{ key: "stopOutlines", label: "Stop outline" },
+			{ key: "pointHandles", label: "Point handles" },
+		] as const;
+	}
+
+	return [
+		{ key: "stopOutlines", label: "Stop outline" },
+		{ key: "stopAnchors", label: "Anchors" },
+	] as const;
+}
+
+function formatPosition(position: Position) {
+	return `{ x: ${Math.round(position.x)}, y: ${Math.round(position.y)} }`;
+}
+
+function formatPositions(points: Position[]) {
+	return `[\n${points.map((point) => `\t${formatPosition(point)},`).join("\n")}\n]`;
+}
+
+export function createEmptyDevDrafts(): DevMapDrafts {
+	const defaultPolygons: DevPolygonDraft[] = [
+		{
+			id: "walkable-main",
+			kind: "walkable",
+			points: [
+				{ x: 546.3756713867188, y: 22.96924591064453 },
+				{ x: 544.2189331054688, y: 142.30918884277344 },
+				{ x: 433.5059509277344, y: 138.71461486816406 },
+				{ x: 426.3168029785156, y: 176.0982208251953 },
+				{ x: 366.6468200683594, y: 175.37930297851562 },
+				{ x: 363.1252746582031, y: 136.66458129882812 },
+				{ x: 195.43826293945312, y: 137.81317138671875 },
+				{ x: 194.0846710205078, y: 173.54269409179688 },
+				{ x: 128.68585205078125, y: 176.0982208251953 },
+				{ x: 131.4070587158203, y: 325.447265625 },
+				{ x: 161.76998901367188, y: 325.5989074707031 },
+				{ x: 160.318115234375, y: 427.7185974121094 },
+				{ x: 127.96693420410156, y: 432.0320739746094 },
+				{ x: 128.68585205078125, y: 475.1669921875 },
+				{ x: 158.8802947998047, y: 474.4480895996094 },
+				{ x: 158.8802947998047, y: 516.1451416015625 },
+				{ x: 186.19908142089844, y: 517.5830078125 },
+				{ x: 186.91798400878906, y: 475.88592529296875 },
+				{ x: 225.8826446533203, y: 475.0686950683594 },
+				{ x: 224.3015899658203, y: 517.5830078125 },
+				{ x: 259.5284423828125, y: 520.4586791992188 },
+				{ x: 258.0906066894531, y: 562.8746948242188 },
+				{ x: 440.6950988769531, y: 565.0314331054688 },
+				{ x: 442.8518371582031, y: 519.73974609375 },
+				{ x: 602.4510498046875, y: 514.7073364257812 },
+				{ x: 608.9213256835938, y: 563.5935668945312 },
+				{ x: 894.1902465820312, y: 566.2642211914062 },
+				{ x: 895.0496215820312, y: 519.0208129882812 },
+				{ x: 925.2440185546875, y: 518.3019409179688 },
+				{ x: 928.838623046875, y: 468.6967468261719 },
+				{ x: 955.4384765625, y: 469.4156799316406 },
+				{ x: 954.0006713867188, y: 376.67559814453125 },
+				{ x: 922.1746215820312, y: 376.2319030761719 },
+				{ x: 923.0872802734375, y: 285.37335205078125 },
+				{ x: 893.6117553710938, y: 286.8111877441406 },
+				{ x: 892.8928833007812, y: 238.6438446044922 },
+				{ x: 925.2440185546875, y: 234.33035278320312 },
+				{ x: 924.716064453125, y: 180.71780395507812 },
+				{ x: 795.1568603515625, y: 180.53245544433594 },
+				{ x: 793.6825561523438, y: 142.30918884277344 },
+				{ x: 639.8346557617188, y: 141.59027099609375 },
+				{ x: 603.1699829101562, y: 141.59027099609375 },
+				{ x: 601.7321166992188, y: 23.688161849975586 },
+			],
+		},
+		{
+			id: "walkable-main",
+			kind: "blocked",
+			points: [
+				{ x: 189.1786346435547, y: 230.91551208496094 },
+				{ x: 189.7936553955078, y: 295.43817138671875 },
+				{ x: 370.8985290527344, y: 294.74169921875 },
+				{ x: 370.0616760253906, y: 216.55685424804688 },
+				{ x: 315.6684265136719, y: 168.0188446044922 },
+				{ x: 197.2552032470703, y: 188.69607543945312 },
+			],
+		},
+		{
+			id: "blocked-2",
+			kind: "blocked",
+			points: [
+				{ x: 447.4630126953125, y: 267.9986267089844 },
+				{ x: 450.5352478027344, y: 348.58453369140625 },
+				{ x: 488.8624267578125, y: 337.8541564941406 },
+				{ x: 489.58135986328125, y: 349.3568115234375 },
+				{ x: 538.4675903320312, y: 347.9189758300781 },
+				{ x: 542.7810668945312, y: 269.5572204589844 },
+				{ x: 517.6190185546875, y: 258.7734680175781 },
+				{ x: 471.60845947265625, y: 258.0545654296875 },
+			],
+		},
+		{
+			id: "blocked-3",
+			kind: "blocked",
+			points: [
+				{ x: 657.8075561523438, y: 185.44410705566406 },
+				{ x: 658.5264282226562, y: 252.30323791503906 },
+				{ x: 722.5099487304688, y: 256.6167297363281 },
+				{ x: 730.41796875, y: 188.3197784423828 },
+				{ x: 693.7532958984375, y: 170.34689331054688 },
+			],
+		},
+		{
+			id: "blocked-4",
+			kind: "blocked",
+			points: [
+				{ x: 818.1256713867188, y: 173.22254943847656 },
+				{ x: 817.40673828125, y: 240.80059814453125 },
+				{ x: 856.2281494140625, y: 240.80059814453125 },
+				{ x: 857.666015625, y: 250.86541748046875 },
+				{ x: 890.0172119140625, y: 251.58432006835938 },
+				{ x: 909.4279174804688, y: 245.8330078125 },
+				{ x: 910.86572265625, y: 175.37930297851562 },
+				{ x: 885.7036743164062, y: 164.59556579589844 },
+				{ x: 838.9741821289062, y: 164.59556579589844 },
+			],
+		},
+		{
+			id: "blocked-5",
+			kind: "blocked",
+			points: [
+				{ x: 242.99339294433594, y: 411.18353271484375 },
+				{ x: 242.99339294433594, y: 480.9183349609375 },
+				{ x: 308.4146728515625, y: 479.4804992675781 },
+				{ x: 312.7281799316406, y: 414.7781066894531 },
+				{ x: 305.5390319824219, y: 401.837646484375 },
+				{ x: 278.2202453613281, y: 395.3674011230469 },
+			],
+		},
+		{
+			id: "blocked-6",
+			kind: "blocked",
+			points: [
+				{ x: 562.9107055664062, y: 426.9996643066406 },
+				{ x: 563.629638671875, y: 493.139892578125 },
+				{ x: 629.0509033203125, y: 496.0155334472656 },
+				{ x: 632.5331420898438, y: 424.8260803222656 },
+				{ x: 597.4186401367188, y: 411.18353271484375 },
+			],
+		},
+		{
+			id: "blocked-7",
+			kind: "blocked",
+			points: [
+				{ x: 690.1587524414062, y: 329.94610595703125 },
+				{ x: 691.5965576171875, y: 398.96197509765625 },
+				{ x: 755.5800170898438, y: 399.6808776855469 },
+				{ x: 762.05029296875, y: 334.978515625 },
+				{ x: 726.8234252929688, y: 313.4110412597656 },
+			],
+		},
+		{
+			id: "blocked-8",
+			kind: "blocked",
+			points: [
+				{ x: 800.8717041015625, y: 460.7886962890625 },
+				{ x: 804.4662475585938, y: 526.9288940429688 },
+				{ x: 841.1309814453125, y: 526.9288940429688 },
+				{ x: 841.1309814453125, y: 543.4639282226562 },
+				{ x: 891.4550170898438, y: 541.3071899414062 },
+				{ x: 894.3306884765625, y: 464.3832702636719 },
+				{ x: 872.0443115234375, y: 453.59954833984375 },
+				{ x: 824.5537719726562, y: 453.12774658203125 },
+			],
+		},
+		{
+			id: "blocked-9",
+			kind: "blocked",
+			points: [
+				{ x: 755.5800170898438, y: 402.5565490722656 },
+				{ x: 755.5800170898438, y: 434.1888122558594 },
+				{ x: 771.3961791992188, y: 450.0049743652344 },
+				{ x: 789.3690185546875, y: 465.1021728515625 },
+				{ x: 803.7473754882812, y: 470.853515625 },
+				{ x: 904.3955078125, y: 483.7939758300781 },
+				{ x: 911.5846557617188, y: 452.880615234375 },
+				{ x: 940.3412475585938, y: 452.880615234375 },
+				{ x: 938.9034423828125, y: 417.6537780761719 },
+				{ x: 908.708984375, y: 416.9348449707031 },
+				{ x: 910.86572265625, y: 370.2053527832031 },
+				{ x: 892.1739501953125, y: 365.8918762207031 },
+				{ x: 892.1739501953125, y: 340.01092529296875 },
+				{ x: 910.1468505859375, y: 340.7298278808594 },
+				{ x: 911.5846557617188, y: 305.50299072265625 },
+				{ x: 836.0985717773438, y: 304.0651550292969 },
+				{ x: 833.222900390625, y: 320.6001892089844 },
+				{ x: 801.5906372070312, y: 320.6001892089844 },
+				{ x: 798.7149658203125, y: 366.61077880859375 },
+				{ x: 769.9583129882812, y: 368.76751708984375 },
+				{ x: 769.2394409179688, y: 396.80523681640625 },
+			],
+		},
+	];
+
+	return {
+		polygons: defaultPolygons.map((entry) => ({
+			...entry,
+			points: entry.points.map((point) => ({ ...point })),
+		})),
+		stops: {},
+	};
+}
+
+export function MapDevTool({
+	activeRegionId,
+	drafts,
+	interactionMode,
+	layerVisibility,
+	mode,
+	onClearActive,
+	onCopyActive,
+	onCopyAll,
+	onCreatePolygonZone,
+	onDeleteActivePolygonZone,
+	onInteractionModeChange,
+	onLayerVisibilityChange,
+	onModeChange,
+	onOpenChange,
+	onUndoActive,
+	open,
+	stops,
+	selectedStopId,
+	setActiveRegionId,
+	setSelectedStopId,
+}: {
+	activeRegionId: string;
+	drafts: DevMapDrafts;
+	interactionMode: DevInteractionMode;
+	layerVisibility: DevLayerVisibility;
+	mode: DevToolMode;
+	onClearActive: () => void;
+	onCopyActive: () => void;
+	onCopyAll: () => void;
+	onCreatePolygonZone: () => void;
+	onDeleteActivePolygonZone: () => void;
+	onInteractionModeChange: (nextMode: DevInteractionMode) => void;
+	onLayerVisibilityChange: <K extends keyof DevLayerVisibility>(
+		layer: K,
+		value: DevLayerVisibility[K],
+	) => void;
+	onModeChange: (nextMode: DevToolMode) => void;
+	onOpenChange: (nextOpen: boolean) => void;
+	onUndoActive: () => void;
+	open: boolean;
+	stops: { id: StopId }[];
+	selectedStopId: StopId;
+	setActiveRegionId: (nextId: string) => void;
+	setSelectedStopId: (nextStopId: StopId) => void;
+}) {
+	const [copiedLabel, setCopiedLabel] = useState<"active" | "all" | null>(null);
+	const polygonZones = useMemo(
+		() =>
+			isPolygonMode(mode)
+				? drafts.polygons.filter((entry) => entry.kind === mode)
+				: [],
+		[drafts.polygons, mode],
+	);
+	const visibleLayers = useMemo(() => getRelevantLayers(mode), [mode]);
+	const modeDescription = MODE_DESCRIPTIONS[mode];
+	const interactionDescription = INTERACTION_DESCRIPTIONS[interactionMode];
+
+	const activeSummary = useMemo(() => {
+		if (mode === "all") {
+			return `${drafts.polygons.length} polygon zones, ${Object.keys(drafts.stops).length} customized stops`;
+		}
+
+		if (isPolygonMode(mode)) {
+			const polygon = drafts.polygons.find(
+				(entry) => entry.kind === mode && entry.id === activeRegionId,
+			);
+
+			if (!polygon) {
+				return `No ${mode} polygon yet.`;
+			}
+
+			return `${polygon.points.length} points in ${polygon.kind}:${polygon.id}`;
+		}
+
+		const stopDraft = drafts.stops[selectedStopId];
+
+		if (mode === "stop-outline") {
+			const count = stopDraft?.outline?.length ?? 0;
+			return count ? `${count} outline points for ${selectedStopId}` : `No outline points for ${selectedStopId}`;
+		}
+
+		if (mode === "stop-info") {
+			return stopDraft?.infoAnchor
+				? `Info anchor for ${selectedStopId}: ${formatPosition(stopDraft.infoAnchor)}`
+				: `No info anchor for ${selectedStopId}`;
+		}
+
+		if (mode === "stop-door") {
+			return stopDraft?.door
+				? `Door for ${selectedStopId}: ${formatPosition(stopDraft.door)}`
+				: `No door point for ${selectedStopId}`;
+		}
+
+		return stopDraft?.exit
+			? `Exit for ${selectedStopId}: ${formatPosition(stopDraft.exit)}`
+			: `No exit point for ${selectedStopId}`;
+	}, [activeRegionId, drafts, mode, selectedStopId]);
+
+	const activeSnippet = useMemo(() => {
+		if (mode === "all") {
+			return JSON.stringify(drafts, null, 2);
+		}
+
+		if (isPolygonMode(mode)) {
+			const polygon = drafts.polygons.find(
+				(entry) => entry.kind === mode && entry.id === activeRegionId,
+			);
+
+			if (!polygon) {
+				return "// Click the map to create a polygon draft.";
+			}
+
+			return `{
+\tid: "${polygon.id}",
+\tkind: "${polygon.kind}",
+\tpoints: ${formatPositions(polygon.points)},
+}`;
+		}
+
+		const stopDraft = drafts.stops[selectedStopId];
+
+		if (mode === "stop-outline") {
+			return stopDraft?.outline?.length
+				? `${selectedStopId}: {\n\toutline: ${formatPositions(stopDraft.outline)},\n}`
+				: `// Click the map to define ${selectedStopId} outline points.`;
+		}
+
+		if (mode === "stop-info") {
+			return stopDraft?.infoAnchor
+				? `${selectedStopId}: {\n\tinfoAnchor: ${formatPosition(stopDraft.infoAnchor)},\n}`
+				: `// Click the map to place the ${selectedStopId} info anchor.`;
+		}
+
+		if (mode === "stop-door") {
+			return stopDraft?.door
+				? `${selectedStopId}: {\n\tdoor: ${formatPosition(stopDraft.door)},\n}`
+				: `// Click the map to place the ${selectedStopId} door.`;
+		}
+
+		return stopDraft?.exit
+			? `${selectedStopId}: {\n\texit: ${formatPosition(stopDraft.exit)},\n}`
+			: `// Click the map to place the ${selectedStopId} exit.`;
+	}, [activeRegionId, drafts, mode, selectedStopId]);
+
+	if (!open) {
+		return null;
+	}
+
+	return (
+		<div
+			className="dev-tool"
+			role="presentation"
+			onClick={() => onOpenChange(false)}
+		>
+			<section
+				className="dev-tool__panel"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="dev-map-tool-title"
+				onClick={(event) => event.stopPropagation()}
+			>
+				<div className="window-shell__header">
+					<div>
+						<p className="pixel-eyebrow">Development Overlay</p>
+						<h2 id="dev-map-tool-title">Map Editor</h2>
+					</div>
+					<button type="button" onClick={() => onOpenChange(false)}>
+						Close
+					</button>
+				</div>
+
+				<label className="dev-tool__field">
+					<span>Mode</span>
+					<select
+						value={mode}
+						onChange={(event) => onModeChange(event.target.value as DevToolMode)}
+					>
+						<option value="all">All Layers</option>
+						<option value="walkable">Walkable Polygon</option>
+						<option value="blocked">Blocked Polygon</option>
+						<option value="section">Section Polygon</option>
+						<option value="stop-outline">Stop Outline</option>
+						<option value="stop-info">Stop Info Anchor</option>
+						<option value="stop-door">Stop Door</option>
+						<option value="stop-exit">Stop Exit</option>
+					</select>
+				</label>
+
+				<div className="dev-tool__callout">
+					<strong>{modeDescription.title}</strong>
+					<p>{modeDescription.body}</p>
+				</div>
+
+				<div className="dev-tool__field">
+					<span>Interaction</span>
+					<div className="dev-tool__segmented">
+						<button
+							type="button"
+							className={interactionMode === "view" ? "is-active" : undefined}
+							onClick={() => onInteractionModeChange("view")}
+						>
+							View
+						</button>
+						<button
+							type="button"
+							className={interactionMode === "capture" ? "is-active" : undefined}
+							onClick={() => onInteractionModeChange("capture")}
+							disabled={mode === "all"}
+						>
+							Capture
+						</button>
+						<button
+							type="button"
+							className={interactionMode === "move" ? "is-active" : undefined}
+							onClick={() => onInteractionModeChange("move")}
+						>
+							Move
+						</button>
+					</div>
+				</div>
+
+				<div className="dev-tool__callout dev-tool__callout--soft">
+					<strong>{interactionDescription.title}</strong>
+					<p>{interactionDescription.body}</p>
+				</div>
+
+				{mode === "all" ? (
+					<section className="dev-tool__overview">
+						<p className="dev-tool__empty">
+							All Layers acts like a polished preview by default: destination
+							outlines stay on, heavy debug layers stay off, and you can turn on
+							extra overlays only when you need them.
+						</p>
+					</section>
+				) : isPolygonMode(mode) ? (
+					<div className="dev-tool__field">
+						<div className="dev-tool__field-header">
+							<span>{POLYGON_LABELS[mode]} zones</span>
+							<div className="dev-tool__mini-actions">
+								<button type="button" onClick={onCreatePolygonZone}>
+									New zone
+								</button>
+								<button
+									type="button"
+									onClick={onDeleteActivePolygonZone}
+									disabled={!polygonZones.some((entry) => entry.id === activeRegionId)}
+								>
+									Delete
+								</button>
+							</div>
+						</div>
+
+						<div className="dev-tool__zone-list">
+							{polygonZones.length ? (
+								polygonZones.map((entry) => (
+									<button
+										type="button"
+										key={`${entry.kind}-${entry.id}`}
+										className={
+											entry.id === activeRegionId ? "is-active" : undefined
+										}
+										onClick={() => setActiveRegionId(entry.id)}
+									>
+										<strong>{entry.id}</strong>
+										<span>{entry.points.length} pts</span>
+									</button>
+								))
+							) : (
+								<p className="dev-tool__empty">
+									No {mode} zones yet. Create one, then switch to Capture.
+								</p>
+							)}
+						</div>
+
+						<label className="dev-tool__field">
+							<span>Zone ID</span>
+							<input
+								type="text"
+								value={activeRegionId}
+								onChange={(event) => setActiveRegionId(event.target.value)}
+								placeholder={`${mode}-main`}
+							/>
+						</label>
+					</div>
+				) : (
+					<label className="dev-tool__field">
+						<span>Stop</span>
+						<select
+							value={selectedStopId}
+							onChange={(event) => setSelectedStopId(event.target.value as StopId)}
+						>
+							{stops.map((stop) => (
+								<option key={stop.id} value={stop.id}>
+									{stop.id}
+								</option>
+							))}
+						</select>
+					</label>
+				)}
+
+				<div className="dev-tool__field">
+					<span>Visible layers for this mode</span>
+					<div className="dev-tool__layers">
+						{visibleLayers.map((layer) => (
+							<label className="dev-tool__checkbox" key={layer.key}>
+								<input
+									type="checkbox"
+									checked={layerVisibility[layer.key]}
+									onChange={(event) =>
+										onLayerVisibilityChange(layer.key, event.target.checked)
+									}
+								/>
+								<span>{layer.label}</span>
+							</label>
+						))}
+					</div>
+				</div>
+
+				<p className="dev-tool__summary">{activeSummary}</p>
+
+				<div className="dev-tool__actions">
+					<button type="button" onClick={onUndoActive}>
+						Undo
+					</button>
+					<button type="button" onClick={onClearActive}>
+						Clear
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							onCopyActive();
+							setCopiedLabel("active");
+							window.setTimeout(() => setCopiedLabel(null), 1200);
+						}}
+					>
+						Copy Active
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							onCopyAll();
+							setCopiedLabel("all");
+							window.setTimeout(() => setCopiedLabel(null), 1200);
+						}}
+					>
+						Copy All
+					</button>
+				</div>
+
+				<p className="dev-tool__hint">
+					{interactionMode === "capture"
+						? "Click on the map to add points or place anchors. Existing handles stay hidden while drawing."
+						: interactionMode === "move"
+							? "Drag visible handles directly on the map to reposition them."
+							: "View mode leaves the map interactive while keeping editor overlays visible."}
+				</p>
+				<p className="dev-tool__hint">
+					{copiedLabel ? `Copied ${copiedLabel} snippet.` : ""}
+				</p>
+
+				<textarea readOnly value={activeSnippet} rows={12} />
+			</section>
+		</div>
+	);
+}
