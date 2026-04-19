@@ -12,6 +12,7 @@ import {
 	type StopId,
 	type TownStop,
 	startPosition,
+	walkZones,
 } from "@/lib/portfolio-content";
 import {
 	createEmptyDevDrafts,
@@ -249,23 +250,23 @@ export function TownPortfolio({
 		setKeyboardMoving(false);
 	}
 
-	function runTravel(from: Position, to: Position, onDone: () => void) {
+	function runTravel(points: Position[], onDone: () => void) {
 		clearTimer();
-		const distance = Math.hypot(to.x - from.x, to.y - from.y);
-		const duration =
-			instantTravel || distance < 4
-				? 0
-				: clamp(Math.round(distance * 1.6), 180, 720);
-
-		if (duration === 0) {
-			setCharacterPosition(to);
-			positionRef.current = to;
+		
+		if (points.length === 0) {
 			onDone();
 			return;
 		}
 
-		const deltaX = to.x - from.x;
-		const deltaY = to.y - from.y;
+		if (instantTravel) {
+			const finalPoint = points[points.length - 1];
+			setCharacterPosition(finalPoint);
+			positionRef.current = finalPoint;
+			onDone();
+			return;
+		}
+
+		let currentPointIndex = 0;
 		let startedAt: number | null = null;
 
 		const step = (timestamp: number) => {
@@ -273,23 +274,49 @@ export function TownPortfolio({
 				startedAt = timestamp;
 			}
 
+			const start = points[currentPointIndex];
+			const end = points[currentPointIndex + 1];
+
+			if (!end) {
+				travelFrameRef.current = null;
+				onDone();
+				return;
+			}
+
+			const distance = Math.hypot(end.x - start.x, end.y - start.y);
+			const duration = clamp(Math.round(distance * 3.2), 50, 2000);
+			
 			const progress = Math.min((timestamp - startedAt) / duration, 1);
 			const nextPosition = {
-				x: from.x + deltaX * progress,
-				y: from.y + deltaY * progress,
+				x: start.x + (end.x - start.x) * progress,
+				y: start.y + (end.y - start.y) * progress,
 			};
 
 			setCharacterPosition(nextPosition);
 			positionRef.current = nextPosition;
 			setProximitySuppressed(false);
 
-			if (progress < 1) {
-				travelFrameRef.current = window.requestAnimationFrame(step);
-				return;
+			// Determine facing based on segment direction
+			const dx = end.x - start.x;
+			const dy = end.y - start.y;
+			if (Math.abs(dx) > Math.abs(dy)) {
+				setFacing(dx > 0 ? "right" : "left");
+			} else if (Math.abs(dy) > 0.1) {
+				setFacing(dy > 0 ? "down" : "up");
 			}
 
-			travelFrameRef.current = null;
-			onDone();
+			if (progress < 1) {
+				travelFrameRef.current = window.requestAnimationFrame(step);
+			} else {
+				currentPointIndex++;
+				if (currentPointIndex < points.length - 1) {
+					startedAt = timestamp;
+					travelFrameRef.current = window.requestAnimationFrame(step);
+				} else {
+					travelFrameRef.current = null;
+					onDone();
+				}
+			}
 		};
 
 		travelFrameRef.current = window.requestAnimationFrame(step);
@@ -727,19 +754,142 @@ export function TownPortfolio({
 		? null 
 		: hoveredStopId ?? (proximitySuppressed ? null : keyboardTargetStopId);
 
-	const isNavigablePoint = useCallback((point: Position) => {
+	const isNavigablePoint = useCallback((point: Position, ignoreStopId?: StopId | null) => {
+		// 1. Check building outlines (They are blocked areas)
+		const isInsideBuilding = effectiveStops.some(stop => {
+			if (stop.id === ignoreStopId) return false;
+			const bounds = getOutlineBounds(stop.outline);
+			// Add a small buffer around buildings
+			return (
+				point.x >= bounds.x - 4 &&
+				point.x <= bounds.x + bounds.width + 4 &&
+				point.y >= bounds.y - 4 &&
+				point.y <= bounds.y + bounds.height + 4
+			);
+		});
+
+		if (isInsideBuilding) {
+			// Exception: if the character is very close to a door, allow it
+			const nearAnyDoor = effectiveStops.some(stop => 
+				Math.hypot(point.x - stop.door.x, point.y - stop.door.y) <= 20
+			);
+			if (!nearAnyDoor) return false;
+		}
+
+		// 2. Check explicit blocked polygons from dev drafts
 		const isBlocked = effectiveBlockedPolygons.some((polygon) =>
 			isPointInPolygon(point, polygon),
 		);
-		const hasWalkablePolygons = effectiveWalkablePolygons.length > 0;
-		const isWalkable =
-			!hasWalkablePolygons ||
-			effectiveWalkablePolygons.some((polygon) =>
-				isPointInPolygon(point, polygon),
-			);
+		if (isBlocked) return false;
 
-		return !isBlocked && isWalkable;
-	}, [effectiveBlockedPolygons, effectiveWalkablePolygons]);
+		// 3. Check if inside any walkable zone (base zones or dev drafts)
+		const inBaseWalkZone = walkZones.some(zone => 
+			point.x >= zone.x && point.x <= zone.x + zone.width &&
+			point.y >= zone.y && point.y <= zone.y + zone.height
+		);
+
+		const inDraftWalkZone = effectiveWalkablePolygons.some((polygon) =>
+			isPointInPolygon(point, polygon),
+		);
+
+		// Must be in at least one walkable area
+		return inBaseWalkZone || inDraftWalkZone;
+	}, [effectiveBlockedPolygons, effectiveWalkablePolygons, effectiveStops]);
+
+	const findPath = useCallback((start: Position, end: Position, targetStopId?: StopId | null): Position[] => {
+		const gridSize = 12; // More granular for better navigation
+		const startX = Math.floor(start.x / gridSize);
+		const startY = Math.floor(start.y / gridSize);
+		const endX = Math.floor(end.x / gridSize);
+		const endY = Math.floor(end.y / gridSize);
+
+		if (startX === endX && startY === endY) {
+			return [start, end];
+		}
+
+		const queue: [number, number][] = [[startX, startY]];
+		const parentMap = new Map<string, [number, number]>();
+		const visited = new Set<string>();
+		const startKey = `${startX},${startY}`;
+		visited.add(startKey);
+
+		let reached = false;
+		// Limit search to prevent hangs
+		let iterations = 0;
+		const maxIterations = 3000;
+
+		while (queue.length > 0 && iterations < maxIterations) {
+			iterations++;
+			const [cx, cy] = queue.shift()!;
+			
+			// If we are close enough to the target grid cell
+			if (Math.abs(cx - endX) <= 1 && Math.abs(cy - endY) <= 1) {
+				reached = true;
+				break;
+			}
+
+			const neighbors = [
+				[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1],
+				[cx + 1, cy + 1], [cx - 1, cy - 1], [cx + 1, cy - 1], [cx - 1, cy + 1]
+			];
+
+			for (const [nx, ny] of neighbors) {
+				const key = `${nx},${ny}`;
+				if (nx < 0 || ny < 0 || nx * gridSize > MAP_WIDTH || ny * gridSize > MAP_HEIGHT) continue;
+				if (visited.has(key)) continue;
+
+				const testPoint = { x: nx * gridSize + gridSize / 2, y: ny * gridSize + gridSize / 2 };
+				if (isNavigablePoint(testPoint, targetStopId)) {
+					visited.add(key);
+					parentMap.set(key, [cx, cy]);
+					queue.push([nx, ny]);
+				}
+			}
+		}
+
+		if (!reached) {
+			return [start, end];
+		}
+
+		// Reconstruct path
+		const path: Position[] = [end];
+		
+		// Find the actual parent of the reached target
+		let targetKey = "";
+		const reachNeighbors = [[endX, endY], [endX+1, endY], [endX-1, endY], [endX, endY+1], [endX, endY-1]];
+		for (const [tx, ty] of reachNeighbors) {
+			if (parentMap.has(`${tx},${ty}`)) {
+				targetKey = `${tx},${ty}`;
+				break;
+			}
+		}
+
+		if (!targetKey) return [start, end];
+
+		let currCoords: [number, number] = targetKey.split(',').map(Number) as [number, number];
+		while (parentMap.has(`${currCoords[0]},${currCoords[1]}`)) {
+			path.unshift({ x: currCoords[0] * gridSize + gridSize / 2, y: currCoords[1] * gridSize + gridSize / 2 });
+			currCoords = parentMap.get(`${currCoords[0]},${currCoords[1]}`)!;
+		}
+
+		path.unshift(start);
+
+		// Simple path smoothing
+		if (path.length > 2) {
+			for (let i = 0; i < path.length - 2; i++) {
+				const p1 = path[i];
+				const p2 = path[i + 2];
+				
+				const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+				if (isNavigablePoint(mid, targetStopId)) {
+					path.splice(i + 1, 1);
+					i--; 
+				}
+			}
+		}
+
+		return path;
+	}, [isNavigablePoint]);
 
 	function handleEnterStop(stopId: StopId) {
 		if (travelingTo || activeStopId) {
@@ -753,7 +903,9 @@ export function TownPortfolio({
 		setTravelingTo(stopId);
 		setCharacterVisible(true);
 
-		runTravel(positionRef.current, stop.door, () => {
+		const path = findPath(positionRef.current, stop.door, stopId);
+
+		runTravel(path, () => {
 			setTravelingTo(null);
 			setActiveStopId(stopId);
 			setLastStopId(stopId);
@@ -773,7 +925,9 @@ export function TownPortfolio({
 		setTravelingTo(stop.id);
 		setCharacterVisible(true);
 
-		runTravel(stop.door, stop.exit, () => {
+		const path = findPath(stop.door, stop.exit);
+
+		runTravel(path, () => {
 			setTravelingTo(null);
 			setLastStopId(stop.id);
 		});
@@ -812,16 +966,9 @@ export function TownPortfolio({
 		setGuideOpen(false);
 		setCharacterVisible(true);
 
-		const deltaX = nextPoint.x - positionRef.current.x;
-		const deltaY = nextPoint.y - positionRef.current.y;
+		const path = findPath(positionRef.current, nextPoint);
 
-		if (Math.abs(deltaX) > Math.abs(deltaY)) {
-			setFacing(deltaX > 0 ? "right" : "left");
-		} else {
-			setFacing(deltaY > 0 ? "down" : "up");
-		}
-
-		runTravel(positionRef.current, nextPoint, () => {
+		runTravel(path, () => {
 			setLastStopId(null);
 		});
 	}
