@@ -24,6 +24,18 @@ export type WalkZone = {
 	height: number;
 };
 
+export type TownMapBackgroundId = "background" | "background-2";
+
+export type TownMapVariant = {
+	id: TownMapBackgroundId;
+	label: string;
+	imageSrc: string;
+	width: number;
+	height: number;
+	startPosition: Position;
+	walkZones: WalkZone[];
+};
+
 export type LinkEntry = {
 	label: string;
 	url: string;
@@ -284,6 +296,39 @@ export const startPosition: Position = {
 	x: aboutStartStop.exit.x,
 	y: aboutStartStop.exit.y + 18,
 };
+
+export const defaultTownMapBackgroundId: TownMapBackgroundId = "background";
+
+export const townMapVariants: TownMapVariant[] = [
+	{
+		id: "background",
+		label: "Background 1",
+		imageSrc: "/background.png",
+		width: MAP_WIDTH,
+		height: MAP_HEIGHT,
+		startPosition,
+		walkZones,
+	},
+	{
+		id: "background-2",
+		label: "Background 2",
+		imageSrc: "/background-2.png",
+		width: 1024,
+		height: 981,
+		startPosition: {
+			x: 512,
+			y: 490,
+		},
+		walkZones: [],
+	},
+];
+
+export function getTownMapVariant(backgroundId: TownMapBackgroundId) {
+	return (
+		townMapVariants.find((variant) => variant.id === backgroundId) ??
+		townMapVariants[0]
+	);
+}
 
 export const portfolioContent: PortfolioContent = {
 	profile: {

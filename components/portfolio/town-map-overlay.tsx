@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
-import { MAP_HEIGHT, MAP_WIDTH, type Position, type StopId, type TownStop } from "@/lib/portfolio-content";
+import type { Position, StopId, TownStop } from "@/lib/portfolio-content";
 import type {
 	DevInteractionMode,
 	DevLayerVisibility,
@@ -15,17 +15,19 @@ import { clamp, isPolygonMode, pointsToPolygon } from "./town-map-utils";
 function getTooltipFrame(
 	outlineBounds: { x: number; y: number; width: number; height: number },
 	label: string,
+	mapHeight: number,
+	mapWidth: number,
 	showKeyboardHint: boolean,
 ) {
 	const width = clamp(Math.round(label.length * 11.2 + 22), 88, 240);
 	const height = 34;
 	const hintAllowance = showKeyboardHint ? 18 : 0;
 	const centerX = outlineBounds.x + outlineBounds.width / 2;
-	const x = clamp(centerX - width / 2, 10, MAP_WIDTH - width - 10);
+	const x = clamp(centerX - width / 2, 10, mapWidth - width - 10);
 	const y = clamp(
 		outlineBounds.y + 12,
 		10,
-		MAP_HEIGHT - height - hintAllowance - 10,
+		mapHeight - height - hintAllowance - 10,
 	);
 
 	return { x, y, width, height };
@@ -48,6 +50,10 @@ function getOutlineBounds(points: Position[]) {
 	};
 }
 
+function isRenderablePoint(point: Position) {
+	return point.x >= 0 && point.y >= 0;
+}
+
 export function TownMapOverlay({
 	activeDraftPoints,
 	activePolygonKind,
@@ -62,6 +68,8 @@ export function TownMapOverlay({
 	facing,
 	focusStopId,
 	isDev,
+	mapHeight,
+	mapWidth,
 	onDragTargetChange,
 	onEnterStop,
 	onHoverChange,
@@ -86,6 +94,8 @@ export function TownMapOverlay({
 	facing: "up" | "down" | "left" | "right";
 	focusStopId: StopId | null;
 	isDev: boolean;
+	mapHeight: number;
+	mapWidth: number;
 	onDragTargetChange: (target: DragTarget | null) => void;
 	onEnterStop: (stopId: StopId) => void;
 	onHoverChange: (stopId: StopId | null) => void;
@@ -113,7 +123,7 @@ export function TownMapOverlay({
 		<svg
 			ref={svgRef}
 			className="map-overlay"
-			viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+			viewBox={`0 0 ${mapWidth} ${mapHeight}`}
 			preserveAspectRatio="xMidYMid slice"
 			onClick={onSurfaceClick}
 			role="img"
@@ -212,18 +222,15 @@ export function TownMapOverlay({
 			{stops.map((stop) => {
 				const draftStop = devDrafts.stops[stop.id];
 				const outline = draftStop?.outline?.length ? draftStop.outline : stop.outline;
+				const door = draftStop?.door ?? stop.door;
+				const exit = draftStop?.exit ?? stop.exit;
 				const infoAnchor = draftStop?.infoAnchor ?? stop.infoAnchor;
-				const outlineBounds = getOutlineBounds(outline);
-				const polygon = pointsToPolygon(outline);
+				const hasOutline = outline.length >= 3;
+				const hasInfoAnchor = isRenderablePoint(infoAnchor);
+				const hasDoor = isRenderablePoint(door);
+				const hasExit = isRenderablePoint(exit);
 				const isVisible = showStopTooltip && visibleStopId === stop.id;
 				const isActive = activeStopId === stop.id;
-				const showKeyboardHint =
-					showStopTooltip && focusStopId === stop.id && !isActive;
-				const tooltipFrame = getTooltipFrame(
-					outlineBounds,
-					stop.shortLabel,
-					showKeyboardHint,
-				);
 				const isSelectedEditorStop =
 					devMode !== "all" &&
 					!isPolygonMode(devMode) &&
@@ -237,6 +244,21 @@ export function TownMapOverlay({
 					isDev &&
 					isSelectedEditorStop &&
 					(showPointHandles || effectiveLayerVisibility.stopAnchors);
+				const hasVisibleEditorLayer =
+					showSelectedStopAnchors &&
+					((showPointHandles &&
+						effectiveLayerVisibility.stopOutlines &&
+						hasOutline) ||
+						(effectiveLayerVisibility.stopAnchors &&
+							!showCaptureOnly &&
+							(hasInfoAnchor || hasDoor || hasExit)));
+
+				if (!hasOutline && !hasVisibleEditorLayer) {
+					return null;
+				}
+
+				const outlineBounds = hasOutline ? getOutlineBounds(outline) : null;
+				const polygon = hasOutline ? pointsToPolygon(outline) : "";
 				const outlineStroke =
 					isVisible || isActive
 						? "#ffffff"
@@ -259,26 +281,30 @@ export function TownMapOverlay({
 							onEnterStop(stop.id);
 						}}
 					>
-						<polygon 
-							className="house-group__hit" 
-							points={polygon} 
-							fill="white" 
-							fillOpacity="0" 
-						/>
-						<rect
-							className="house-group__nav-outline"
-							x={outlineBounds.x}
-							y={outlineBounds.y}
-							width={outlineBounds.width}
-							height={outlineBounds.height}
-							rx="0"
-							ry="0"
-							fill="white"
-							fillOpacity="0"
-							stroke={outlineStroke}
-							strokeWidth={outlineWidth}
-						/>
-						{showSelectedStopOutline ? (
+						{hasOutline ? (
+							<>
+								<polygon 
+									className="house-group__hit" 
+									points={polygon} 
+									fill="white" 
+									fillOpacity="0" 
+								/>
+								<rect
+									className="house-group__nav-outline"
+									x={outlineBounds!.x}
+									y={outlineBounds!.y}
+									width={outlineBounds!.width}
+									height={outlineBounds!.height}
+									rx="0"
+									ry="0"
+									fill="white"
+									fillOpacity="0"
+									stroke={outlineStroke}
+									strokeWidth={outlineWidth}
+								/>
+							</>
+						) : null}
+						{showSelectedStopOutline && hasOutline ? (
 							<polyline className="active-stop-outline" points={polygon} fill="none" />
 						) : null}
 						{showSelectedStopAnchors ? (
@@ -312,66 +338,72 @@ export function TownMapOverlay({
 									: null}
 								{effectiveLayerVisibility.stopAnchors && !showCaptureOnly ? (
 									<>
-										<g
-											className={`dev-anchor dev-anchor--info ${
-												devInteractionMode === "move" ? "is-draggable" : ""
-											}`}
-											transform={`translate(${infoAnchor.x} ${infoAnchor.y})`}
-											onPointerDown={(event) => {
-												if (devInteractionMode !== "move") {
-													return;
-												}
-												event.stopPropagation();
-												onDragTargetChange({
-													type: "stop-anchor",
-													stopId: stop.id,
-													anchor: "infoAnchor",
-												});
-											}}
-										>
-											<circle r="6" />
-											<text x="10" y="4">i</text>
-										</g>
-										<g
-											className={`dev-anchor dev-anchor--door ${
-												devInteractionMode === "move" ? "is-draggable" : ""
-											}`}
-											transform={`translate(${(draftStop?.door ?? stop.door).x} ${(draftStop?.door ?? stop.door).y})`}
-											onPointerDown={(event) => {
-												if (devInteractionMode !== "move") {
-													return;
-												}
-												event.stopPropagation();
-												onDragTargetChange({
-													type: "stop-anchor",
-													stopId: stop.id,
-													anchor: "door",
-												});
-											}}
-										>
-											<circle r="6" />
-											<text x="10" y="4">D</text>
-										</g>
-										<g
-											className={`dev-anchor dev-anchor--exit ${
-												devInteractionMode === "move" ? "is-draggable" : ""
-											}`}
-											transform={`translate(${(draftStop?.exit ?? stop.exit).x} ${(draftStop?.exit ?? stop.exit).y})`}
-											onPointerDown={(event) => {
-												if (devInteractionMode !== "move") {
-													return;
-												}
-												event.stopPropagation();
-												onDragTargetChange({
-													type: "stop-anchor",
-													stopId: stop.id,
-													anchor: "exit",
-												});
-											}}
-										>
-											<circle r="6" />
-											<text x="10" y="4">E</text>
-										</g>
+										{isRenderablePoint(infoAnchor) ? (
+											<g
+												className={`dev-anchor dev-anchor--info ${
+													devInteractionMode === "move" ? "is-draggable" : ""
+												}`}
+												transform={`translate(${infoAnchor.x} ${infoAnchor.y})`}
+												onPointerDown={(event) => {
+													if (devInteractionMode !== "move") {
+														return;
+													}
+													event.stopPropagation();
+													onDragTargetChange({
+														type: "stop-anchor",
+														stopId: stop.id,
+														anchor: "infoAnchor",
+													});
+												}}
+											>
+												<circle r="6" />
+												<text x="10" y="4">i</text>
+											</g>
+										) : null}
+										{isRenderablePoint(door) ? (
+											<g
+												className={`dev-anchor dev-anchor--door ${
+													devInteractionMode === "move" ? "is-draggable" : ""
+												}`}
+												transform={`translate(${door.x} ${door.y})`}
+												onPointerDown={(event) => {
+													if (devInteractionMode !== "move") {
+														return;
+													}
+													event.stopPropagation();
+													onDragTargetChange({
+														type: "stop-anchor",
+														stopId: stop.id,
+														anchor: "door",
+													});
+												}}
+											>
+												<circle r="6" />
+												<text x="10" y="4">D</text>
+											</g>
+										) : null}
+										{isRenderablePoint(exit) ? (
+											<g
+												className={`dev-anchor dev-anchor--exit ${
+													devInteractionMode === "move" ? "is-draggable" : ""
+												}`}
+												transform={`translate(${exit.x} ${exit.y})`}
+												onPointerDown={(event) => {
+													if (devInteractionMode !== "move") {
+														return;
+													}
+													event.stopPropagation();
+													onDragTargetChange({
+														type: "stop-anchor",
+														stopId: stop.id,
+														anchor: "exit",
+													});
+												}}
+											>
+												<circle r="6" />
+												<text x="10" y="4">E</text>
+											</g>
+										) : null}
 									</>
 								) : null}
 							</g>
@@ -459,11 +491,22 @@ export function TownMapOverlay({
 			{stops.map((stop) => {
 				const draftStop = devDrafts.stops[stop.id];
 				const outline = draftStop?.outline?.length ? draftStop.outline : stop.outline;
+
+				if (outline.length < 3) {
+					return null;
+				}
+
 				const outlineBounds = getOutlineBounds(outline);
 				const isVisible = showStopTooltip && visibleStopId === stop.id;
 				const isActive = activeStopId === stop.id;
 				const showKeyboardHint = showStopTooltip && focusStopId === stop.id && !isActive;
-				const tooltipFrame = getTooltipFrame(outlineBounds, stop.shortLabel, showKeyboardHint);
+				const tooltipFrame = getTooltipFrame(
+					outlineBounds,
+					stop.shortLabel,
+					mapHeight,
+					mapWidth,
+					showKeyboardHint,
+				);
 
 				if (!isVisible) return null;
 
