@@ -297,7 +297,7 @@ export const startPosition: Position = {
 	y: aboutStartStop.exit.y + 18,
 };
 
-export const defaultTownMapBackgroundId: TownMapBackgroundId = "background";
+export const defaultTownMapBackgroundId: TownMapBackgroundId = "background-2";
 
 export const townMapVariants: TownMapVariant[] = [
 	{

@@ -114,7 +114,9 @@ function getDefaultLayerVisibility(mode: DevToolMode): DevLayerVisibility {
 
 const ACTIVE_BACKGROUND_STORAGE_KEY = "pokemon-town-active-background";
 const DEV_DRAFT_STORAGE_KEY = "pokemon-town-dev-drafts";
+const SHOW_LEGACY_BACKGROUND_STORAGE_KEY = "pokemon-town-show-legacy-background";
 const EMPTY_STOP_POSITION: Position = { x: -9999, y: -9999 };
+const LEGACY_BACKGROUND_ID: TownMapBackgroundId = "background";
 
 function getDraftStorageKey(backgroundId: TownMapBackgroundId) {
 	return `${DEV_DRAFT_STORAGE_KEY}:${backgroundId}`;
@@ -122,6 +124,10 @@ function getDraftStorageKey(backgroundId: TownMapBackgroundId) {
 
 function isTownMapBackgroundId(value: string | null): value is TownMapBackgroundId {
 	return townMapVariants.some((background) => background.id === value);
+}
+
+function isLegacyBackgroundEnabled(value: string | null) {
+	return value === "true";
 }
 
 function isUnsetPosition(position: Position) {
@@ -200,6 +206,8 @@ export function TownPortfolio({
 	const [keyboardMoving, setKeyboardMoving] = useState(false);
 	const [proximitySuppressed, setProximitySuppressed] = useState(false);
 	const [facing, setFacing] = useState<"up" | "down" | "left" | "right">("down");
+	const [cameraReady, setCameraReady] = useState(false);
+	const [showLegacyBackground, setShowLegacyBackground] = useState(false);
 	const [viewportSize, setViewportSize] = useState(() => ({
 		width: typeof window === "undefined" ? defaultMapVariant.width : window.innerWidth,
 		height:
@@ -218,7 +226,16 @@ export function TownPortfolio({
 	const positionRef = useRef(defaultMapVariant.startPosition);
 	const svgRef = useRef<SVGSVGElement | null>(null);
 	const viewportRef = useRef<HTMLDivElement | null>(null);
-	const seedLayoutEnabled = activeBackgroundId === defaultTownMapBackgroundId;
+	const availableBackgrounds = useMemo(
+		() =>
+			showLegacyBackground
+				? townMapVariants
+				: townMapVariants.filter(
+						(background) => background.id !== LEGACY_BACKGROUND_ID,
+					),
+		[showLegacyBackground],
+	);
+	const seedLayoutEnabled = activeBackgroundId === LEGACY_BACKGROUND_ID;
 	const baseStops = useMemo(
 		() =>
 			seedLayoutEnabled
@@ -258,14 +275,52 @@ export function TownPortfolio({
 				: "Town square";
 
 	useEffect(() => {
+		const savedLegacyBackgroundFlag = window.localStorage.getItem(
+			SHOW_LEGACY_BACKGROUND_STORAGE_KEY,
+		);
+		const legacyBackgroundEnabled = isLegacyBackgroundEnabled(
+			savedLegacyBackgroundFlag,
+		);
+		setShowLegacyBackground(legacyBackgroundEnabled);
+
 		const savedBackground = window.localStorage.getItem(
 			ACTIVE_BACKGROUND_STORAGE_KEY,
 		);
 
-		if (isTownMapBackgroundId(savedBackground)) {
+		if (
+			isTownMapBackgroundId(savedBackground) &&
+			(legacyBackgroundEnabled || savedBackground !== LEGACY_BACKGROUND_ID)
+		) {
 			setActiveBackgroundId(savedBackground);
 		}
 	}, []);
+
+	useEffect(() => {
+		window.localStorage.setItem(
+			SHOW_LEGACY_BACKGROUND_STORAGE_KEY,
+			String(showLegacyBackground),
+		);
+
+		if (!showLegacyBackground && activeBackgroundId === LEGACY_BACKGROUND_ID) {
+			const nextMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
+
+			clearTimer();
+			stopMovementLoop();
+			pressedKeysRef.current.clear();
+			setDragTarget(null);
+			setHoveredStopId(null);
+			setActiveStopId(null);
+			setTravelingTo(null);
+			setLastStopId(null);
+			setCharacterVisible(true);
+			setProximitySuppressed(false);
+			setCharacterPosition(nextMapVariant.startPosition);
+			positionRef.current = nextMapVariant.startPosition;
+			setDevDrafts(createSeedDevDrafts(defaultTownMapBackgroundId));
+			setDraftsHydrated(false);
+			setActiveBackgroundId(defaultTownMapBackgroundId);
+		}
+	}, [activeBackgroundId, showLegacyBackground]);
 
 	useEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
@@ -362,6 +417,7 @@ export function TownPortfolio({
 		};
 
 		syncViewport();
+		setCameraReady(true);
 		const observer = new ResizeObserver(syncViewport);
 		observer.observe(element);
 
@@ -1463,48 +1519,53 @@ export function TownPortfolio({
 		<div className="relative min-h-screen overflow-hidden">
 			<div className="town-page__chrome fixed inset-0 z-50 pointer-events-none" />
 
-			<main className="relative z-10 h-screen w-screen overflow-hidden">
+			<main className="relative z-10 h-[100dvh] w-screen overflow-hidden">
 				<section className="h-full w-full bg-transparent" aria-label="Pokemon-inspired portfolio town">
-					<div className="pointer-events-none absolute right-6 left-6 top-6 z-20 flex items-center justify-between gap-4">
-						<div className="pointer-events-auto flex items-center gap-4">
+					<div className="pointer-events-none absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20 flex flex-col gap-3 sm:left-6 sm:right-6 sm:top-6 sm:flex-row sm:items-start sm:justify-between">
+						<div className="pointer-events-auto flex flex-wrap items-stretch gap-3 sm:max-w-[calc(100%-11rem)] sm:items-center">
 							<button
 								type="button"
-								className="pixel-button text-sm"
+								className="pixel-button min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
 								onClick={() => setGuideOpen(true)}
 							>
 								Guide
 							</button>
-							<label className="pixel-card pointer-events-auto flex items-center gap-3 bg-white/85 px-4 py-2">
-								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">
-									Background
-								</span>
-								<select
-									className="bg-transparent font-dot-gothic text-sm outline-none"
-									value={activeBackgroundId}
-									onChange={(event) =>
-										handleBackgroundChange(
-											event.target.value as TownMapBackgroundId,
-										)
-									}
-								>
-									{townMapVariants.map((background) => (
-										<option key={background.id} value={background.id}>
-											{background.label}
-										</option>
-									))}
-								</select>
-							</label>
+							{availableBackgrounds.length > 1 ? (
+								<label className="pixel-card pointer-events-auto flex min-w-0 flex-[999_1_16rem] items-center gap-3 bg-white/85 px-3 py-2 sm:flex-[0_1_20rem] sm:px-4">
+									<span className="shrink-0 font-dot-gothic text-[10px] uppercase tracking-wider text-ink-soft sm:text-xs">
+										Background
+									</span>
+									<select
+										className="min-w-0 flex-1 bg-transparent font-dot-gothic text-xs outline-none sm:text-sm"
+										value={activeBackgroundId}
+										onChange={(event) =>
+											handleBackgroundChange(
+												event.target.value as TownMapBackgroundId,
+											)
+										}
+									>
+										{availableBackgrounds.map((background) => (
+											<option key={background.id} value={background.id}>
+												{background.label}
+											</option>
+										))}
+									</select>
+								</label>
+							) : null}
 							{editorEnabled ? (
 								<button
 									type="button"
-									className="pixel-button bg-sky text-sm"
+									className="pixel-button min-h-[52px] flex-1 bg-sky px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
 									onClick={() => setDevToolOpen(true)}
 								>
 									Map Editor
 								</button>
 							) : null}
 						</div>
-						<Link className="pixel-button pointer-events-auto text-sm" href="/admin">
+						<Link
+							className="pixel-button pointer-events-auto min-h-[52px] w-full px-4 py-3 text-center text-xs sm:min-h-0 sm:w-auto sm:px-6 sm:py-3 sm:text-sm"
+							href="/admin"
+						>
 							Admin Route
 						</Link>
 					</div>
@@ -1514,19 +1575,27 @@ export function TownPortfolio({
 						className="relative flex h-full w-full items-center justify-center overflow-hidden bg-transparent"
 					>
 						<div
-							className={`map-surface-scanlines map-scene absolute left-0 top-0 overflow-hidden ${
+							className={`map-surface-scanlines ${
+								cameraReady
+									? "map-scene absolute left-0 top-0"
+									: "relative h-full w-full"
+							} overflow-hidden ${
 								editorEnabled && devInteractionMode === "capture"
 									? "cursor-crosshair"
 									: devInteractionMode === "move"
 										? "cursor-grab"
 										: ""
 							}`}
-							style={{
-								height: activeMapVariant.height,
-								transform: sceneTransform,
-								transformOrigin: "top left",
-								width: activeMapVariant.width,
-							}}
+							style={
+								cameraReady
+									? {
+											height: activeMapVariant.height,
+											transform: sceneTransform,
+											transformOrigin: "top left",
+											width: activeMapVariant.width,
+										}
+									: undefined
+							}
 						>
 							<Image
 								className="map-image"
@@ -1536,6 +1605,7 @@ export function TownPortfolio({
 								sizes="100vw"
 								aria-hidden="true"
 								priority
+								style={{ objectFit: cameraReady ? "fill" : "cover" }}
 							/>
 							<TownMapOverlay
 								activeDraftPoints={activeDraftPoints}
@@ -1571,28 +1641,28 @@ export function TownPortfolio({
 
 			{guideOpen ? (
 				<div
-					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-6 backdrop-blur-sm"
+					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-4 backdrop-blur-sm sm:p-6"
 					role="presentation"
 					onClick={() => setGuideOpen(false)}
 				>
 					<section
-						className="pokedex-box flex w-[min(720px,calc(100vw-2rem))] max-w-full max-h-[min(90vh,900px)] flex-col gap-6 overflow-x-hidden overflow-y-auto p-8 scrollbar-thin"
+						className="pokedex-box flex w-[min(720px,calc(100vw-1rem))] max-w-full max-h-[min(calc(100dvh-1rem),900px)] flex-col gap-5 overflow-x-hidden overflow-y-auto p-5 scrollbar-thin sm:gap-6 sm:p-8"
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby="guide-dialog-title"
 						onClick={(event) => event.stopPropagation()}
 					>
-						<div className="flex items-center justify-between gap-4">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div>
 								<p className="pixel-eyebrow">Pokemon Town Portfolio</p>
-								<h2 className="m-0 font-dot-gothic text-2xl leading-tight" id="guide-dialog-title">Choose your route through the work.</h2>
+								<h2 className="m-0 font-dot-gothic text-xl leading-tight sm:text-2xl" id="guide-dialog-title">Choose your route through the work.</h2>
 							</div>
-							<button className="pixel-button px-4 py-2 text-sm" type="button" onClick={() => setGuideOpen(false)}>
+							<button className="pixel-button w-full px-4 py-2 text-sm sm:w-auto" type="button" onClick={() => setGuideOpen(false)}>
 								Close
 							</button>
 						</div>
 
-						<p className="m-0 text-2xl leading-tight">
+						<p className="m-0 text-lg leading-tight sm:text-2xl">
 							{content.profile.intro}
 							<span className="pixel-arrow">▼</span>
 						</p>
@@ -1600,16 +1670,16 @@ export function TownPortfolio({
 						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
 								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Current scene</span>
-								<strong className="truncate text-xl leading-tight">{sceneLabel}</strong>
+								<strong className="truncate text-lg leading-tight sm:text-xl">{sceneLabel}</strong>
 							</div>
 							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
 								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Mode</span>
-								<strong className="truncate text-xl leading-tight">{instantTravel ? "Recruiter mode" : "Walk mode"}</strong>
+								<strong className="truncate text-lg leading-tight sm:text-xl">{instantTravel ? "Recruiter mode" : "Walk mode"}</strong>
 							</div>
 							{content.profile.quickStats.map((stat) => (
 								<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4" key={stat.label}>
 									<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">{stat.label}</span>
-									<strong className="truncate text-xl leading-tight">{stat.value}</strong>
+									<strong className="truncate text-lg leading-tight sm:text-xl">{stat.value}</strong>
 								</div>
 							))}
 						</div>
@@ -1618,17 +1688,30 @@ export function TownPortfolio({
 							<div className="flex items-center justify-between gap-4">
 								<p className="pixel-eyebrow">Settings</p>
 							</div>
-							<div className="pixel-card flex min-w-0 box-border items-center justify-between gap-4 bg-white/40 p-4">
+							<div className="pixel-card flex min-w-0 box-border flex-col gap-4 bg-white/40 p-4 sm:flex-row sm:items-center sm:justify-between">
 								<div className="flex min-w-0 flex-1 flex-col gap-1">
-									<strong className="truncate text-lg leading-tight">Instant Travel</strong>
+									<strong className="truncate text-base leading-tight sm:text-lg">Instant Travel</strong>
 									<span className="font-dot-gothic text-xs text-ink-soft">Skip walking transitions between stops</span>
 								</div>
 								<button
 									type="button"
-									className={`pixel-button px-4 py-2 text-sm transition-colors ${instantTravel ? 'bg-accent' : 'bg-white'}`}
+									className={`pixel-button w-full px-4 py-2 text-sm transition-colors sm:w-auto ${instantTravel ? 'bg-accent' : 'bg-white'}`}
 									onClick={() => setSkipTravel(!skipTravel)}
 								>
 									{instantTravel ? "Enabled" : "Disabled"}
+								</button>
+							</div>
+							<div className="pixel-card flex min-w-0 box-border flex-col gap-4 bg-white/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+								<div className="flex min-w-0 flex-1 flex-col gap-1">
+									<strong className="truncate text-base leading-tight sm:text-lg">Legacy Background 1</strong>
+									<span className="font-dot-gothic text-xs text-ink-soft">Show the original background as an optional alternate map</span>
+								</div>
+								<button
+									type="button"
+									className={`pixel-button w-full px-4 py-2 text-sm transition-colors sm:w-auto ${showLegacyBackground ? 'bg-accent' : 'bg-white'}`}
+									onClick={() => setShowLegacyBackground(!showLegacyBackground)}
+								>
+									{showLegacyBackground ? "Enabled" : "Hidden"}
 								</button>
 							</div>
 						</div>
@@ -1646,7 +1729,7 @@ export function TownPortfolio({
 									<button
 										key={stop.id}
 										type="button"
-										className={`group flex min-w-0 box-border items-center gap-5 border-4 p-4 text-left transition-all ${
+										className={`group flex min-w-0 box-border flex-col items-start gap-4 border-4 p-4 text-left transition-all sm:flex-row sm:items-center sm:gap-5 ${
 											!hasMappedStop
 												? "cursor-not-allowed border-line-soft/10 bg-white/40 opacity-50"
 												: isCurrent
@@ -1661,21 +1744,21 @@ export function TownPortfolio({
 											setGuideOpen(false);
 										}}
 									>
-										<span className={`flex h-14 w-14 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-xl ${isCurrent ? 'bg-white' : 'bg-sky'}`}>
+										<span className={`flex h-12 w-12 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-lg sm:h-14 sm:w-14 sm:text-xl ${isCurrent ? 'bg-white' : 'bg-sky'}`}>
 											{stop.order}
 										</span>
 										<div className="flex min-w-0 flex-1 flex-col gap-1">
-											<div className="flex items-center gap-3">
-												<strong className="truncate text-xl leading-tight">{stop.title}</strong>
+											<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+												<strong className="truncate text-lg leading-tight sm:text-xl">{stop.title}</strong>
 												{isRecommended && (
 													<span className="shrink-0 bg-accent-strong px-2 py-0.5 font-dot-gothic text-[10px] uppercase text-white">
 														Recommended
 													</span>
 												)}
 											</div>
-											<p className="m-0 truncate text-lg leading-tight text-ink-soft">{stop.preview}</p>
+											<p className="m-0 text-base leading-tight text-ink-soft sm:truncate sm:text-lg">{stop.preview}</p>
 										</div>
-										<span className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 font-dot-gothic text-xl text-accent-strong animate-pixel-blink">▶</span>
+										<span className="ml-auto hidden font-dot-gothic text-xl text-accent-strong opacity-0 transition-opacity group-hover:opacity-100 sm:block sm:animate-pixel-blink">▶</span>
 									</button>
 								);
 							})}
@@ -1686,12 +1769,12 @@ export function TownPortfolio({
 
 			{activeStop && !guideOpen ? (
 				<div
-					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-6 backdrop-blur-md"
+					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-4 backdrop-blur-md sm:p-6"
 					role="presentation"
 					onClick={handleCloseStop}
 				>
 					<section
-						className="pokedex-box flex w-[min(1360px,calc(100vw-2rem))] max-h-[min(92vh,980px)] flex-col overflow-hidden p-8"
+						className="pokedex-box flex w-[min(1360px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),980px)] flex-col overflow-hidden p-5 sm:p-8"
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby="town-window-title"
@@ -1699,15 +1782,15 @@ export function TownPortfolio({
 					>
 						<div className="flex flex-col gap-4 border-b border-line/10 pb-6 sm:flex-row sm:items-center sm:justify-between">
 							<div className="flex items-center gap-5">
-								<div className="flex h-16 w-14 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-2xl shadow-pixel">
+								<div className="flex h-14 w-12 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-xl shadow-pixel sm:h-16 sm:w-14 sm:text-2xl">
 									{activeStop.order}
 								</div>
 								<div>
 									<p className="pixel-eyebrow">{activeStop.title}</p>
-									<h2 className="m-0 font-dot-gothic text-3xl leading-tight" id="town-window-title">{activeStop.shortLabel}</h2>
+									<h2 className="m-0 font-dot-gothic text-2xl leading-tight sm:text-3xl" id="town-window-title">{activeStop.shortLabel}</h2>
 								</div>
 							</div>
-							<button className="pixel-button px-6 py-3 text-lg" type="button" onClick={handleCloseStop}>
+							<button className="pixel-button w-full px-6 py-3 text-base sm:w-auto sm:text-lg" type="button" onClick={handleCloseStop}>
 								Close Room
 							</button>
 						</div>
@@ -1715,12 +1798,12 @@ export function TownPortfolio({
 						<div className="flex-1 min-h-0 overflow-auto pr-2 pt-8 scrollbar-thin">
 							<div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-[1fr_320px]">
 								<div className="pixel-card flex flex-col gap-1 border-line-soft/10 bg-white/60 p-5">
-									<p className="m-0 text-2xl leading-tight text-ink">{activeStop.subtitle}</p>
+									<p className="m-0 text-lg leading-tight text-ink sm:text-2xl">{activeStop.subtitle}</p>
 									<span className="font-dot-gothic text-xs uppercase tracking-widest text-ink-soft">Current stop</span>
 								</div>
 								<div className="pixel-card flex flex-col gap-2 bg-accent p-5 shadow-pixel">
 									<p className="pixel-eyebrow text-xs!">At A Glance</p>
-									<strong className="text-xl leading-tight">{activeStop.preview}</strong>
+									<strong className="text-lg leading-tight sm:text-xl">{activeStop.preview}</strong>
 								</div>
 							</div>
 
@@ -1734,7 +1817,7 @@ export function TownPortfolio({
 				<MapDevTool
 					activeBackgroundId={activeBackgroundId}
 					activeRegionId={devRegionId}
-					backgrounds={townMapVariants.map((background) => ({
+					backgrounds={availableBackgrounds.map((background) => ({
 						id: background.id,
 						label: background.label,
 					}))}

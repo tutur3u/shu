@@ -150,8 +150,8 @@ export function GameShelf({
 
 	return (
 		<div className="flex flex-col gap-6">
-			<section className="pokedex-box flex flex-col gap-6 p-8">
-				<div className="flex items-center justify-between gap-4">
+			<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+				<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 					<p className="pixel-eyebrow">{title}</p>
 					<span className="font-dot-gothic text-base uppercase tracking-wider text-ink-soft">
 						{selectedIndex + 1}/{entries.length}
@@ -159,14 +159,14 @@ export function GameShelf({
 				</div>
 				<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 					<div className="flex flex-col gap-4">
-						<h3 className="font-dot-gothic text-4xl leading-tight">{selectedEntry.title}</h3>
+						<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">{selectedEntry.title}</h3>
 						<p className="font-dot-gothic text-xl uppercase tracking-wide text-ink-soft">
 							{selectedEntry.role}
 						</p>
-						<p className="text-2xl leading-relaxed">{selectedEntry.blurb}</p>
+						<p className="text-lg leading-relaxed sm:text-2xl">{selectedEntry.blurb}</p>
 					</div>
 
-					<div className="flex flex-col gap-4 min-w-[280px]">
+					<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 						{[
 							{ label: "Category", value: selectedEntry.category },
 							{ label: "Role", value: selectedEntry.role },
@@ -182,17 +182,17 @@ export function GameShelf({
 						))}
 					</div>
 				</div>
-				<p className="m-0 border-t border-line/10 pt-4 text-xl leading-relaxed text-ink-soft">
+				<p className="m-0 border-t border-line/10 pt-4 text-base leading-relaxed text-ink-soft sm:text-xl">
 					{description}
 				</p>
 			</section>
 
 			<div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(380px,0.95fr)_minmax(0,1.05fr)]">
 				<section className="pokedex-box flex flex-col gap-5 p-6">
-					<div className="flex items-start justify-between gap-4">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div>
 							<p className="pixel-eyebrow">Arcade Picker</p>
-							<h4 className="m-0 font-dot-gothic text-2xl">Choose A Build</h4>
+							<h4 className="m-0 font-dot-gothic text-xl sm:text-2xl">Choose A Build</h4>
 						</div>
 						<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
 							Keyboard Ready
@@ -246,7 +246,7 @@ export function GameShelf({
 											optionRefs.current[index] = node;
 										}}
 										aria-selected={isSelected}
-										className={`flex w-full items-center gap-4 border-4 bg-panel px-4 py-4 text-left transition-all ${
+										className={`flex w-full items-center gap-3 border-4 bg-panel px-4 py-4 text-left transition-all sm:gap-4 ${
 											isSelected
 												? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
 												: "border-line-soft/20 hover:border-line/20"
@@ -263,7 +263,7 @@ export function GameShelf({
 										</span>
 										<span className="flex min-w-0 flex-col gap-1">
 											<span className="flex items-center gap-3">
-												<strong className="truncate text-xl leading-tight">{entry.title}</strong>
+												<strong className="truncate text-lg leading-tight sm:text-xl">{entry.title}</strong>
 												{isSelected && (
 													<span className="inline-flex items-center justify-center bg-black/10 px-2 py-0.5 font-dot-gothic text-xs uppercase">
 														Selected
@@ -284,26 +284,26 @@ export function GameShelf({
 					</ul>
 				</section>
 
-				<section className="pokedex-box relative flex flex-col gap-6 overflow-hidden p-6">
-					<div className="flex items-start justify-between gap-4">
+				<section className="pokedex-box relative flex flex-col gap-6 overflow-hidden p-5 sm:p-6">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 						<div className="flex min-w-0 flex-col gap-2">
 							<p className="pixel-eyebrow">Now Highlighted</p>
-							<div className="flex items-start justify-between gap-4">
-								<h4 className="m-0 font-dot-gothic text-3xl leading-tight">{selectedEntry.title}</h4>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+								<h4 className="m-0 font-dot-gothic text-2xl leading-tight sm:text-3xl">{selectedEntry.title}</h4>
 								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
 									{selectedEntry.meta}
 								</span>
 							</div>
-							<p className="m-0 font-dot-gothic text-lg text-ink-soft">{selectedEntry.role}</p>
+							<p className="m-0 font-dot-gothic text-base text-ink-soft sm:text-lg">{selectedEntry.role}</p>
 						</div>
-						<div className="flex h-20 w-20 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-2xl shadow-pixel" aria-hidden="true">
+						<div className="flex h-16 w-16 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-xl shadow-pixel sm:h-20 sm:w-20 sm:text-2xl" aria-hidden="true">
 							{String(selectedIndex + 1).padStart(2, "0")}
 						</div>
 					</div>
 
 					<div className="pixel-card flex flex-col gap-3 bg-panel-strong p-5">
 						<p className="pixel-eyebrow text-xs!">Build Readout</p>
-						<p className="text-xl leading-relaxed">{selectedEntry.blurb}</p>
+						<p className="text-lg leading-relaxed sm:text-xl">{selectedEntry.blurb}</p>
 					</div>
 
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -334,7 +334,7 @@ export function GameShelf({
 									<span className="font-dot-gothic text-xs text-ink-soft">
 										{String(index + 1).padStart(2, "0")}
 									</span>
-									<p className="m-0 text-lg leading-relaxed">{highlight}</p>
+									<p className="m-0 text-base leading-relaxed sm:text-lg">{highlight}</p>
 								</article>
 							))}
 						</div>
@@ -343,7 +343,7 @@ export function GameShelf({
 					<div className="mt-auto flex flex-col gap-4 pt-4">
 						{primaryLink && (
 							<a
-								className="pixel-button flex min-h-[64px] items-center justify-center text-xl shadow-pixel-strong"
+								className="pixel-button flex min-h-[64px] items-center justify-center text-lg shadow-pixel-strong sm:text-xl"
 								href={primaryLink.url}
 								target="_blank"
 								rel="noreferrer"
@@ -356,7 +356,7 @@ export function GameShelf({
 							<div className="flex flex-wrap gap-4">
 								{secondaryLinks.map((link) => (
 									<a
-										className="pixel-button inline-flex flex-1 items-center justify-center bg-white px-6 py-3 text-lg"
+										className="pixel-button inline-flex flex-1 items-center justify-center bg-white px-6 py-3 text-base sm:text-lg"
 										href={link.url}
 										key={link.url}
 										target="_blank"

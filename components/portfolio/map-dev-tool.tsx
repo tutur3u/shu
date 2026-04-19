@@ -436,7 +436,7 @@ export function createEmptyDevDrafts(): DevMapDrafts {
 export function createSeedDevDrafts(
 	backgroundId: TownMapBackgroundId = defaultTownMapBackgroundId,
 ): DevMapDrafts {
-	if (backgroundId === defaultTownMapBackgroundId) {
+	if (backgroundId === "background") {
 		return {
 			polygons: DEFAULT_BACKGROUND_POLYGONS.map((entry) => ({
 				...entry,
@@ -631,23 +631,23 @@ export function MapDevTool({
 
 	return (
 		<div
-			className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-6 backdrop-blur-md"
+			className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-4 backdrop-blur-md sm:p-6"
 			role="presentation"
 			onClick={() => onOpenChange(false)}
 		>
 			<section
-				className="pokedex-box flex w-[min(800px,calc(100vw-2rem))] max-h-[min(92vh,960px)] flex-col gap-6 overflow-auto p-8 scrollbar-thin"
+				className="pokedex-box flex w-[min(800px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),960px)] flex-col gap-6 overflow-auto p-5 scrollbar-thin sm:p-8"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="dev-map-tool-title"
 				onClick={(event) => event.stopPropagation()}
 			>
-				<div className="flex items-center justify-between gap-4 border-b border-line/10 pb-4">
+				<div className="flex flex-col gap-3 border-b border-line/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="pixel-eyebrow">Development Overlay</p>
-						<h2 className="m-0 font-dot-gothic text-2xl leading-tight" id="dev-map-tool-title">Map Editor</h2>
+						<h2 className="m-0 font-dot-gothic text-xl leading-tight sm:text-2xl" id="dev-map-tool-title">Map Editor</h2>
 					</div>
-					<button className="pixel-button px-4 py-2 text-sm" type="button" onClick={() => onOpenChange(false)}>
+					<button className="pixel-button w-full px-4 py-2 text-sm sm:w-auto" type="button" onClick={() => onOpenChange(false)}>
 						Close
 					</button>
 				</div>
@@ -690,12 +690,12 @@ export function MapDevTool({
 
 					<div className="pixel-card border-line-soft bg-white/60 p-4">
 						<strong className="font-dot-gothic text-base uppercase tracking-wide">{modeDescription.title}</strong>
-						<p className="m-0 mt-1 text-lg leading-snug text-ink-soft">{modeDescription.body}</p>
+						<p className="m-0 mt-1 text-base leading-snug text-ink-soft sm:text-lg">{modeDescription.body}</p>
 					</div>
 
 					<div className="flex flex-col gap-4">
 						<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Interaction</span>
-						<div className="grid grid-cols-3 gap-3">
+						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 							{(["view", "capture", "move"] as DevInteractionMode[]).map((intMode) => (
 								<button
 									key={intMode}
@@ -712,7 +712,7 @@ export function MapDevTool({
 						</div>
 						<div className="pixel-card border-line-soft bg-white/40 p-4">
 							<strong className="font-dot-gothic text-base uppercase tracking-wide">{interactionDescription.title}</strong>
-							<p className="m-0 mt-1 text-lg leading-snug text-ink-soft">{interactionDescription.body}</p>
+							<p className="m-0 mt-1 text-base leading-snug text-ink-soft sm:text-lg">{interactionDescription.body}</p>
 						</div>
 					</div>
 
@@ -724,7 +724,7 @@ export function MapDevTool({
 						</div>
 					) : isPolygonMode(mode) ? (
 						<div className="flex flex-col gap-4">
-							<div className="flex items-center justify-between gap-4">
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{POLYGON_LABELS[mode]} zones</span>
 								<div className="flex gap-2">
 									<button className="pixel-button bg-sky px-3 py-1 text-xs" type="button" onClick={onCreatePolygonZone}>
@@ -741,7 +741,7 @@ export function MapDevTool({
 								</div>
 							</div>
 
-							<div className="grid grid-cols-2 gap-3">
+							<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 								{polygonZones.length ? (
 									polygonZones.map((entry) => (
 										<button
@@ -791,7 +791,7 @@ export function MapDevTool({
 
 					<div className="flex flex-col gap-4">
 						<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Visibility</span>
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							{visibleLayers.map((layer) => (
 								<label className="pixel-card flex items-center gap-3 bg-white/40 p-3" key={layer.key}>
 									<input
@@ -810,7 +810,7 @@ export function MapDevTool({
 
 					<p className="m-0 text-center font-dot-gothic text-base tracking-wide text-accent-strong">{activeSummary}</p>
 
-					<div className="grid grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						{[
 							{ label: "Undo", action: onUndoActive, color: "bg-panel-strong" },
 							{ label: "Clear", action: onClearActive, color: "bg-panel-strong" },

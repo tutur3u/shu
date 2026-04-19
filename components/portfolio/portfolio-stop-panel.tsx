@@ -21,8 +21,8 @@ export function PortfolioStopPanel({
 	if (detailMode === "about") {
 		return (
 			<div className="flex flex-col gap-6">
-				<section className="pokedex-box flex flex-col gap-6 p-8">
-					<div className="flex items-center justify-between gap-4">
+				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Profile Snapshot</p>
 						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							{content.profile.title}
@@ -30,14 +30,14 @@ export function PortfolioStopPanel({
 					</div>
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 						<div className="flex flex-col gap-4">
-							<h3 className="font-dot-gothic text-4xl leading-tight">{content.profile.name}</h3>
-							<p className="text-2xl leading-relaxed">{content.profile.tagline}</p>
-							<p className="m-0 text-xl leading-relaxed text-ink-soft">
+							<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">{content.profile.name}</h3>
+							<p className="text-lg leading-relaxed sm:text-2xl">{content.profile.tagline}</p>
+							<p className="m-0 text-lg leading-relaxed text-ink-soft sm:text-xl">
 								{content.about.lead}
 								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="flex flex-col gap-4 min-w-[280px]">
+						<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 							{content.profile.quickStats.map((stat) => (
 								<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={stat.label}>
 									<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{stat.label}</span>
@@ -51,13 +51,13 @@ export function PortfolioStopPanel({
 				<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 					{content.about.sections.map((section) => (
 						<section className="pixel-card flex flex-col gap-4 bg-panel-strong/50 p-6" key={section.title}>
-							<div className="flex items-center justify-between gap-4">
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 								<p className="pixel-eyebrow">{section.title}</p>
 								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
 									Focus
 								</span>
 							</div>
-							<p className="m-0 text-xl leading-relaxed">{section.body}</p>
+							<p className="m-0 text-lg leading-relaxed sm:text-xl">{section.body}</p>
 							<ul className="m-0 mt-2 flex flex-col gap-2 pl-5 list-disc">
 								{section.points.map((point) => (
 									<li key={point} className="text-lg leading-snug">{point}</li>
@@ -73,8 +73,8 @@ export function PortfolioStopPanel({
 	if (detailMode === "projects") {
 		return (
 			<div className="flex flex-col gap-6">
-				<section className="pokedex-box flex flex-col gap-6 p-8">
-					<div className="flex items-center justify-between gap-4">
+				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Flagship Work</p>
 						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							Curated Board
@@ -82,14 +82,14 @@ export function PortfolioStopPanel({
 					</div>
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 						<div className="flex flex-col gap-4">
-							<h3 className="font-dot-gothic text-4xl leading-tight">Projects</h3>
-							<p className="text-2xl leading-relaxed">
+							<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">Projects</h3>
+							<p className="text-lg leading-relaxed sm:text-2xl">
 								Team projects, showcase pieces, and design writing selected for the
 								clearest read on process, tone, and presentation.
 								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="flex flex-col gap-4 min-w-[280px]">
+						<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
 								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Entries</span>
 								<strong className="text-xl leading-tight">{content.projects.length}</strong>
@@ -131,8 +131,8 @@ export function PortfolioStopPanel({
 	if (detailMode === "contact") {
 		return (
 			<div className="flex flex-col gap-6">
-				<section className="pokedex-box flex flex-col gap-6 p-8">
-					<div className="flex items-center justify-between gap-4">
+				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Next Move</p>
 						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							Open Channels
@@ -140,14 +140,14 @@ export function PortfolioStopPanel({
 					</div>
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 						<div className="flex flex-col gap-4">
-							<h3 className="font-dot-gothic text-4xl leading-tight">Contact</h3>
-							<p className="text-2xl leading-relaxed">
+							<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">Contact</h3>
+							<p className="text-lg leading-relaxed sm:text-2xl">
 								Reach out through the route that fits best, from professional
 								follow-up to browsing more released work.
 								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="flex flex-col gap-4 min-w-[280px]">
+						<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
 								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Channels</span>
 								<strong className="text-xl leading-tight">{content.contact.length}</strong>
@@ -170,7 +170,7 @@ export function PortfolioStopPanel({
 							rel="noreferrer"
 						>
 							<p className="pixel-eyebrow">{entry.label}</p>
-							<strong className="text-2xl leading-tight">{entry.value}</strong>
+							<strong className="text-xl leading-tight sm:text-2xl">{entry.value}</strong>
 							<p className="m-0 text-lg leading-snug text-ink-soft">{entry.note}</p>
 						</a>
 					))}
@@ -182,8 +182,8 @@ export function PortfolioStopPanel({
 	if (detailMode === "coming-soon") {
 		return (
 			<div className="flex flex-col gap-6">
-				<section className="pokedex-box flex flex-col gap-6 p-8">
-					<div className="flex items-center justify-between gap-4">
+				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Reserved Build Site</p>
 						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							Slot {stop.order}
@@ -191,15 +191,15 @@ export function PortfolioStopPanel({
 					</div>
 					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 						<div className="flex flex-col gap-4">
-							<h3 className="font-dot-gothic text-4xl leading-tight">{stop.title}</h3>
-							<p className="text-2xl leading-relaxed">
+							<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">{stop.title}</h3>
+							<p className="text-lg leading-relaxed sm:text-2xl">
 								This route is still empty on purpose. It is being held for the next
 								portfolio drop so new work arrives with its own front door instead
 								of getting buried inside an older room.
 								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="flex flex-col gap-4 min-w-[280px]">
+						<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
 								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Status</span>
 								<strong className="text-xl leading-tight">Reserved</strong>
@@ -213,8 +213,8 @@ export function PortfolioStopPanel({
 				</section>
 
 				<div className="grid grid-cols-1 gap-6">
-					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-8">
-						<div className="flex items-center justify-between gap-4">
+					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-5 sm:p-8">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<p className="pixel-eyebrow">Possible Directions</p>
 							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
 								Three Lanes
@@ -236,14 +236,14 @@ export function PortfolioStopPanel({
 						</div>
 					</section>
 
-					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-8">
-						<div className="flex items-center justify-between gap-4">
+					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-5 sm:p-8">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<p className="pixel-eyebrow">Current Signal</p>
 							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
 								At A Glance
 							</span>
 						</div>
-						<p className="m-0 text-xl leading-relaxed">{stop.preview}</p>
+						<p className="m-0 text-lg leading-relaxed sm:text-xl">{stop.preview}</p>
 						<div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
 							{[
 								{ title: "Worth the detour", body: "The next room should add a new angle to the portfolio, not repeat an existing stop." },
@@ -264,8 +264,8 @@ export function PortfolioStopPanel({
 
 	return (
 		<div className="flex flex-col gap-6">
-			<section className="pokedex-box flex flex-col gap-6 p-8">
-				<div className="flex items-center justify-between gap-4">
+			<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<p className="pixel-eyebrow">Studio Preview</p>
 					<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 						Curator View
@@ -273,10 +273,10 @@ export function PortfolioStopPanel({
 				</div>
 				<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 					<div className="flex flex-col gap-4">
-						<h3 className="font-dot-gothic text-4xl leading-tight">Control Room</h3>
-						<p className="text-2xl leading-relaxed">{content.dashboard.intro}</p>
+						<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">Control Room</h3>
+						<p className="text-lg leading-relaxed sm:text-2xl">{content.dashboard.intro}</p>
 					</div>
-					<div className="flex flex-col gap-4 min-w-[280px]">
+					<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
 						{content.dashboard.toolStatus.map((status) => (
 							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={status.label}>
 								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{status.label}</span>
