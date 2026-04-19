@@ -101,15 +101,6 @@ export type TownStop = {
 	exit: Position;
 };
 
-function mapPoint(xPercent: number, yPercent: number): Position {
-	return {
-		x: (MAP_WIDTH * xPercent) / 100,
-		y: (MAP_HEIGHT * yPercent) / 100,
-	};
-}
-
-export const startPosition: Position = mapPoint(50, 54);
-
 export const walkZones: WalkZone[] = [
 	{ id: "north-west", x: 170, y: 170, width: 235, height: 210 },
 	{ id: "center-left", x: 392, y: 250, width: 182, height: 170 },
@@ -286,6 +277,13 @@ export const townStops: TownStop[] = [
 		exit: { x: 262.93206787109375, y: 508.0433349609375 },
 	},
 ];
+
+const aboutStartStop = townStops.find((stop) => stop.id === "about")!;
+
+export const startPosition: Position = {
+	x: aboutStartStop.exit.x,
+	y: aboutStartStop.exit.y + 18,
+};
 
 export const portfolioContent: PortfolioContent = {
 	profile: {
