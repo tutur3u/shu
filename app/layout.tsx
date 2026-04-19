@@ -1,18 +1,12 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
-import { Press_Start_2P, VT323 } from "next/font/google";
+import { DotGothic16 } from "next/font/google";
 import "./globals.css";
 
-const displayFont = Press_Start_2P({
+const dotGothic = DotGothic16({
 	weight: "400",
-	variable: "--font-display",
 	subsets: ["latin"],
-});
-
-const bodyFont = VT323({
-	weight: "400",
-	variable: "--font-body",
-	subsets: ["latin"],
+	variable: "--font-dot-gothic",
 });
 
 export const metadata: Metadata = {
@@ -32,9 +26,9 @@ export default function RootLayout({
 	return (
 		<html
 			lang="en"
-			className={`${displayFont.variable} ${bodyFont.variable} h-full antialiased`}
+			className={`${dotGothic.variable} h-full`}
 		>
-			<body className="min-h-full">
+			<body className={`${dotGothic.className} min-h-full`}>
 				<Analytics />
 				{children}
 			</body>

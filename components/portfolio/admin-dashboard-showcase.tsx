@@ -49,66 +49,74 @@ export function AdminDashboardShowcase({
 	);
 
 	return (
-		<div className="admin-page">
-			<div className="admin-page__chrome" />
+		<div className="relative min-h-screen overflow-hidden">
+			<div className="town-page__chrome fixed inset-0 z-1 pointer-events-none" />
 
-			<main className="admin-wrap">
-				<header className="admin-topbar">
+			<main className="relative z-10 mx-auto grid max-w-7xl gap-6 p-6">
+				<header className="pokedex-box flex items-center justify-between gap-4 p-6">
 					<div>
-						<p className="pixel-eyebrow">Admin Center</p>
-						<h1>Portfolio Studio Desk</h1>
+						<p className="pixel-eyebrow text-xs!">Admin Center</p>
+						<h1 className="font-dot-gothic text-3xl leading-tight">Portfolio Studio Desk</h1>
 					</div>
-					<Link className="route-link route-link--small" href="/">
+					<Link className="pixel-button px-4 py-2 text-sm" href="/">
 						Back To Town
 					</Link>
 				</header>
 
 				{isUnlocked ? (
-					<div className="admin-shell">
-						<aside className="admin-sidebar">
-							<p className="pixel-eyebrow">Panels</p>
-							<div className="admin-sidebar__nav">
+					<div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
+						<aside className="pixel-card flex flex-col gap-6 bg-panel-dark p-6 text-white">
+							<p className="pixel-eyebrow text-white/60">Panels</p>
+							<nav className="flex flex-col gap-4">
 								{(["overview", "content", "queue"] as AdminView[]).map((view) => (
 									<button
 										type="button"
 										key={view}
 										onClick={() => setActiveView(view)}
-										className={activeView === view ? "is-active" : undefined}
+										className={`pixel-button py-3 ${
+											activeView === view
+												? "bg-accent-strong text-white"
+												: "bg-accent text-ink"
+										}`}
 									>
 										{view}
 									</button>
 								))}
-							</div>
+							</nav>
 
-							<div className="admin-sidebar__notes">
-								<p className="pixel-eyebrow">Preview Status</p>
+							<div className="mt-4 flex flex-col gap-4 border-t border-white/10 pt-6">
+								<p className="pixel-eyebrow text-white/60">Preview Status</p>
 								{dashboard.toolStatus.map((status) => (
-									<div key={status.label}>
-										<span>{status.label}</span>
-										<strong>{status.value}</strong>
+									<div key={status.label} className="flex flex-col gap-1">
+										<span className="font-dot-gothic text-xs uppercase tracking-widest text-white/40">
+											{status.label}
+										</span>
+										<strong className="text-lg leading-tight">{status.value}</strong>
 									</div>
 								))}
 							</div>
 						</aside>
 
-						<section className="admin-main">
+						<section className="flex flex-col gap-6">
 							{activeView === "overview" ? (
 								<>
-									<div className="admin-card-grid">
+									<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 										{stats.map((stat) => (
-											<section className="admin-card" key={stat.label}>
-												<p className="pixel-eyebrow">{stat.label}</p>
-												<h2>{stat.value}</h2>
+											<section className="pixel-card flex flex-col gap-2 p-6" key={stat.label}>
+												<p className="pixel-eyebrow text-xs!">{stat.label}</p>
+												<h2 className="text-3xl leading-tight">{stat.value}</h2>
 											</section>
 										))}
 									</div>
 
-									<section className="admin-card admin-card--wide">
+									<section className="pixel-card flex flex-col gap-4 p-8">
 										<p className="pixel-eyebrow">Studio Summary</p>
-										<h2>{dashboard.intro}</h2>
-										<ul className="window-list">
+										<h2 className="text-2xl leading-relaxed">{dashboard.intro}</h2>
+										<ul className="m-0 mt-4 flex flex-col gap-3 pl-8 list-disc">
 											{dashboard.notes.map((note) => (
-												<li key={note}>{note}</li>
+												<li key={note} className="text-xl leading-relaxed">
+													{note}
+												</li>
 											))}
 										</ul>
 									</section>
@@ -116,78 +124,89 @@ export function AdminDashboardShowcase({
 							) : null}
 
 							{activeView === "content" ? (
-								<div className="admin-editor">
-									<section className="admin-card">
+								<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+									<section className="pixel-card flex flex-col gap-6 p-8">
 										<p className="pixel-eyebrow">Content Controls</p>
-										<label className="admin-field">
-											<span>Hero Title</span>
-											<input
-												type="text"
-												value={heroTitle}
-												onChange={(event) => setHeroTitle(event.target.value)}
-											/>
-										</label>
-										<label className="admin-field">
-											<span>Featured Project</span>
-											<select
-												value={featuredProject}
-												onChange={(event) => setFeaturedProject(event.target.value)}
-											>
-												{projects.map((project) => (
-													<option key={project.title} value={project.title}>
-														{project.title}
-													</option>
-												))}
-											</select>
-										</label>
-										<label className="admin-field">
-											<span>Featured Game</span>
-											<select
-												value={featuredGame}
-												onChange={(event) => setFeaturedGame(event.target.value)}
-											>
-												{games.map((game) => (
-													<option key={game.title} value={game.title}>
-														{game.title}
-													</option>
-												))}
-											</select>
-										</label>
-										<label className="admin-field">
-											<span>CTA Tone</span>
-											<select
-												value={ctaTone}
-												onChange={(event) => setCtaTone(event.target.value)}
-											>
-												<option>Clear</option>
-												<option>Warm</option>
-												<option>Playful</option>
-											</select>
-										</label>
+										<div className="flex flex-col gap-4">
+											<label className="flex flex-col gap-2">
+												<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+													Hero Title
+												</span>
+												<input
+													className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+													type="text"
+													value={heroTitle}
+													onChange={(event) => setHeroTitle(event.target.value)}
+												/>
+											</label>
+											<label className="flex flex-col gap-2">
+												<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+													Featured Project
+												</span>
+												<select
+													className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+													value={featuredProject}
+													onChange={(event) => setFeaturedProject(event.target.value)}
+												>
+													{projects.map((project) => (
+														<option key={project.title} value={project.title}>
+															{project.title}
+														</option>
+													))}
+												</select>
+											</label>
+											<label className="flex flex-col gap-2">
+												<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+													Featured Game
+												</span>
+												<select
+													className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+													value={featuredGame}
+													onChange={(event) => setFeaturedGame(event.target.value)}
+												>
+													{games.map((game) => (
+														<option key={game.title} value={game.title}>
+															{game.title}
+														</option>
+													))}
+												</select>
+											</label>
+											<label className="flex flex-col gap-2">
+												<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+													CTA Tone
+												</span>
+												<select
+													className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+													value={ctaTone}
+													onChange={(event) => setCtaTone(event.target.value)}
+												>
+													<option>Clear</option>
+													<option>Warm</option>
+													<option>Playful</option>
+												</select>
+											</label>
+										</div>
 									</section>
 
-									<section className="admin-card">
+									<section className="pixel-card flex flex-col gap-6 p-8">
 										<p className="pixel-eyebrow">Live Preview</p>
-										<h2>{heroTitle}</h2>
-										<div className="status-grid">
-											<div>
-												<span>Featured Project</span>
-												<strong>{featuredProject}</strong>
-											</div>
-											<div>
-												<span>Featured Game</span>
-												<strong>{featuredGame}</strong>
-											</div>
-											<div>
-												<span>CTA Tone</span>
-												<strong>{ctaTone}</strong>
-											</div>
-											<div>
-												<span>Profile</span>
-												<strong>{profile.name}</strong>
-											</div>
+										<h2 className="text-2xl leading-tight">{heroTitle}</h2>
+										<div className="grid grid-cols-2 gap-4">
+											{[
+												{ label: "Featured Project", value: featuredProject },
+												{ label: "Featured Game", value: featuredGame },
+												{ label: "CTA Tone", value: ctaTone },
+												{ label: "Profile", value: profile.name }
+											].map((item) => (
+												<div className="pixel-card flex flex-col gap-1 bg-white/50 p-4" key={item.label}>
+													<span className="font-dot-gothic text-xs uppercase tracking-widest text-ink-soft">
+														{item.label}
+													</span>
+													<strong className="text-lg leading-tight">{item.value}</strong>
+												</div>
+											))}
 										</div>
-										<p className="admin-muted">
+										<p className="m-0 border-t border-line/10 pt-4 text-lg leading-snug text-ink-soft">
 											This view is meant for trying presentation changes before
 											settling on a final direction.
 										</p>
@@ -196,24 +215,31 @@ export function AdminDashboardShowcase({
 							) : null}
 
 							{activeView === "queue" ? (
-								<div className="admin-editor">
-									<section className="admin-card">
+								<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+									<section className="pixel-card flex flex-col gap-4 p-8">
 										<p className="pixel-eyebrow">Publish Queue</p>
-										<ul className="window-list">
+										<ul className="m-0 flex flex-col gap-3 pl-8 list-disc">
 											{dashboard.publishQueue.map((item) => (
-												<li key={item}>{item}</li>
+												<li key={item} className="text-xl leading-relaxed">
+													{item}
+												</li>
 											))}
 										</ul>
 									</section>
 
-									<section className="admin-card">
+									<section className="pixel-card flex flex-col gap-6 p-8">
 										<p className="pixel-eyebrow">Contact Routes</p>
-										<div className="contact-list">
+										<div className="flex flex-col gap-4">
 											{contacts.map((contact) => (
-												<div className="contact-card" key={contact.href}>
-													<strong>{contact.label}</strong>
-													<span>{contact.value}</span>
-													<p>{contact.note}</p>
+												<div
+													className="pixel-card flex flex-col gap-2 border-line-soft/20 bg-white/60 p-5"
+													key={contact.href}
+												>
+													<strong className="text-xl leading-tight">{contact.label}</strong>
+													<span className="font-dot-gothic text-sm uppercase tracking-widest text-ink-soft">
+														{contact.value}
+													</span>
+													<p className="m-0 text-lg leading-snug">{contact.note}</p>
 												</div>
 											))}
 										</div>
@@ -223,28 +249,43 @@ export function AdminDashboardShowcase({
 						</section>
 					</div>
 				) : (
-					<section className="admin-login">
-						<p className="pixel-eyebrow">Studio Preview</p>
-						<h2>Enter Portfolio Desk</h2>
-						<p>
+					<section className="pixel-card mx-auto mt-12 flex w-full max-w-lg flex-col gap-6 p-10">
+						<p className="pixel-eyebrow text-xs!">Studio Preview</p>
+						<h2 className="font-dot-gothic text-3xl leading-tight">Enter Portfolio Desk</h2>
+						<p className="text-xl leading-relaxed">
 							Open the curator-side preview for featured work, copy direction, and
 							contact priorities.
 						</p>
 						<form
+							className="mt-4 flex flex-col gap-6"
 							onSubmit={(event) => {
 								event.preventDefault();
 								setIsUnlocked(true);
 							}}
 						>
-							<label className="admin-field">
-								<span>Profile Key</span>
-								<input type="text" defaultValue="lmquang" />
+							<label className="flex flex-col gap-2">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+									Profile Key
+								</span>
+								<input
+									className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+									type="text"
+									defaultValue="lmquang"
+								/>
 							</label>
-							<label className="admin-field">
-								<span>Preview Pass</span>
-								<input type="password" defaultValue="0000" />
+							<label className="flex flex-col gap-2">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+									Preview Pass
+								</span>
+								<input
+									className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+									type="password"
+									defaultValue="0000"
+								/>
 							</label>
-							<button type="submit">Open Preview Desk</button>
+							<button className="pixel-button mt-4 py-4 text-xl" type="submit">
+								Open Preview Desk
+							</button>
 						</form>
 					</section>
 				)}

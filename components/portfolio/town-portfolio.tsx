@@ -141,6 +141,8 @@ export function TownPortfolio({
 	const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 	const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
 	const [keyboardMoving, setKeyboardMoving] = useState(false);
+	const [proximitySuppressed, setProximitySuppressed] = useState(false);
+	const [facing, setFacing] = useState<"up" | "down" | "left" | "right">("down");
 
 	const travelFrameRef = useRef<number | null>(null);
 	const movementFrameRef = useRef<number | null>(null);
@@ -279,6 +281,7 @@ export function TownPortfolio({
 
 			setCharacterPosition(nextPosition);
 			positionRef.current = nextPosition;
+			setProximitySuppressed(false);
 
 			if (progress < 1) {
 				travelFrameRef.current = window.requestAnimationFrame(step);
@@ -720,7 +723,9 @@ export function TownPortfolio({
 
 		return null;
 	}, [characterPosition, effectiveStops]);
-	const focusStopId = keyboardMoving ? null : hoveredStopId ?? keyboardTargetStopId;
+	const focusStopId = keyboardMoving 
+		? null 
+		: hoveredStopId ?? (proximitySuppressed ? null : keyboardTargetStopId);
 
 	const isNavigablePoint = useCallback((point: Position) => {
 		const isBlocked = effectiveBlockedPolygons.some((polygon) =>
@@ -806,17 +811,32 @@ export function TownPortfolio({
 		pressedKeysRef.current.clear();
 		setGuideOpen(false);
 		setCharacterVisible(true);
+
+		const deltaX = nextPoint.x - positionRef.current.x;
+		const deltaY = nextPoint.y - positionRef.current.y;
+
+		if (Math.abs(deltaX) > Math.abs(deltaY)) {
+			setFacing(deltaX > 0 ? "right" : "left");
+		} else {
+			setFacing(deltaY > 0 ? "down" : "up");
+		}
+
 		runTravel(positionRef.current, nextPoint, () => {
 			setLastStopId(null);
 		});
 	}
 
+	const handleHoverChange = useCallback((stopId: StopId | null) => {
+		setHoveredStopId(stopId);
+		if (stopId !== null) {
+			setProximitySuppressed(true);
+		}
+	}, []);
+
 	const visibleStopId =
 		editorEnabled && devInteractionMode !== "view"
 			? null
-			: keyboardMoving
-				? travelingTo ?? activeStopId ?? null
-				: hoveredStopId ?? travelingTo ?? activeStopId ?? keyboardTargetStopId ?? null;
+			: travelingTo ?? activeStopId ?? focusStopId;
 
 	const trainerTransform = useMemo(
 		() => `translate(${characterPosition.x - 16} ${characterPosition.y - 34})`,
@@ -890,6 +910,12 @@ export function TownPortfolio({
 				vertical += 1;
 			}
 
+			if (horizontal !== 0) {
+				setFacing(horizontal > 0 ? "right" : "left");
+			} else if (vertical !== 0) {
+				setFacing(vertical > 0 ? "down" : "up");
+			}
+
 			if (horizontal === 0 && vertical === 0) {
 				movementFrameRef.current = window.requestAnimationFrame((nextTimestamp) =>
 					movementTickRef.current?.(nextTimestamp),
@@ -930,6 +956,7 @@ export function TownPortfolio({
 				setCharacterPosition(nextPoint);
 				positionRef.current = nextPoint;
 				setLastStopId(null);
+				setProximitySuppressed(false);
 			}
 
 			movementFrameRef.current = window.requestAnimationFrame((nextTimestamp) =>
@@ -1045,16 +1072,16 @@ export function TownPortfolio({
 	}, []);
 
 	return (
-		<div className="town-page">
-			<div className="town-page__chrome" />
+		<div className="relative min-h-screen overflow-hidden">
+			<div className="town-page__chrome fixed inset-0 z-50 pointer-events-none" />
 
-			<main className="town-shell">
-				<section className="map-panel" aria-label="Pokemon-inspired portfolio town">
-					<div className="map-panel__header">
-						<div className="map-panel__actions">
+			<main className="relative z-10 h-screen w-screen overflow-hidden">
+				<section className="h-full w-full bg-transparent" aria-label="Pokemon-inspired portfolio town">
+					<div className="pointer-events-none absolute right-6 left-6 top-6 z-20 flex items-center justify-between gap-4">
+						<div className="pointer-events-auto flex items-center gap-4">
 							<button
 								type="button"
-								className="route-link route-link--small"
+								className="pixel-button text-sm"
 								onClick={() => setGuideOpen(true)}
 							>
 								Guide
@@ -1062,25 +1089,25 @@ export function TownPortfolio({
 							{editorEnabled ? (
 								<button
 									type="button"
-									className="route-link route-link--small route-link--dev"
+									className="pixel-button bg-sky text-sm"
 									onClick={() => setDevToolOpen(true)}
 								>
 									Map Editor
 								</button>
 							) : null}
 						</div>
-						<Link className="route-link route-link--small" href="/admin">
+						<Link className="pixel-button pointer-events-auto text-sm" href="/admin">
 							Admin Route
 						</Link>
 					</div>
 
-					<div className="map-frame">
+					<div className="flex h-full w-full items-center justify-center bg-transparent">
 						<div
-							className={`map-surface ${
+							className={`map-surface-scanlines relative h-full w-full overflow-hidden ${
 								editorEnabled && devInteractionMode === "capture"
-									? "map-surface--capture"
+									? "cursor-crosshair"
 									: devInteractionMode === "move"
-										? "map-surface--move"
+										? "cursor-grab"
 										: ""
 							}`}
 						>
@@ -1104,11 +1131,12 @@ export function TownPortfolio({
 								devRegionId={devRegionId}
 								devSelectedStopId={devSelectedStopId}
 								effectiveLayerVisibility={effectiveLayerVisibility}
+								facing={facing}
 								focusStopId={focusStopId}
 								isDev={editorEnabled}
 								onDragTargetChange={setDragTarget}
 								onEnterStop={handleEnterStop}
-								onHoverChange={setHoveredStopId}
+								onHoverChange={handleHoverChange}
 								onSurfaceClick={handleSurfaceClick}
 								showCaptureOnly={showCaptureOnly}
 								showPointHandles={showPointHandles}
@@ -1124,117 +1152,149 @@ export function TownPortfolio({
 
 			{guideOpen ? (
 				<div
-					className="guide-backdrop"
+					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-6 backdrop-blur-sm"
 					role="presentation"
 					onClick={() => setGuideOpen(false)}
 				>
 					<section
-						className="quest-panel quest-panel--dialog"
+						className="pokedex-box flex w-[min(720px,calc(100vw-2rem))] max-w-full max-h-[min(90vh,900px)] flex-col gap-6 overflow-x-hidden overflow-y-auto p-8 scrollbar-thin"
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby="guide-dialog-title"
 						onClick={(event) => event.stopPropagation()}
 					>
-						<div className="window-shell__header">
+						<div className="flex items-center justify-between gap-4">
 							<div>
 								<p className="pixel-eyebrow">Pokemon Town Portfolio</p>
-								<h2 id="guide-dialog-title">Choose your route through the work.</h2>
+								<h2 className="m-0 font-dot-gothic text-2xl leading-tight" id="guide-dialog-title">Choose your route through the work.</h2>
 							</div>
-							<button type="button" onClick={() => setGuideOpen(false)}>
+							<button className="pixel-button px-4 py-2 text-sm" type="button" onClick={() => setGuideOpen(false)}>
 								Close
 							</button>
 						</div>
 
-						<p className="quest-panel__lede">{content.profile.intro}</p>
+						<p className="m-0 text-2xl leading-tight">
+							{content.profile.intro}
+							<span className="pixel-arrow">▼</span>
+						</p>
 
-						<div className="status-grid">
-							<div>
-								<span>Current scene</span>
-								<strong>{sceneLabel}</strong>
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
+								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Current scene</span>
+								<strong className="truncate text-xl leading-tight">{sceneLabel}</strong>
 							</div>
-							<div>
-								<span>Mode</span>
-								<strong>{instantTravel ? "Recruiter mode" : "Walk mode"}</strong>
+							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
+								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Mode</span>
+								<strong className="truncate text-xl leading-tight">{instantTravel ? "Recruiter mode" : "Walk mode"}</strong>
 							</div>
 							{content.profile.quickStats.map((stat) => (
-								<div key={stat.label}>
-									<span>{stat.label}</span>
-									<strong>{stat.value}</strong>
+								<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4" key={stat.label}>
+									<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">{stat.label}</span>
+									<strong className="truncate text-xl leading-tight">{stat.value}</strong>
 								</div>
 							))}
 						</div>
 
-						<div className="toggle-card">
-							<div>
-								<p className="pixel-eyebrow">Travel Style</p>
-								<span>Toggle between the walking tour and instant room-to-room jumps.</span>
+						<div className="flex flex-col gap-4 border-t border-line/10 pt-6">
+							<div className="flex items-center justify-between gap-4">
+								<p className="pixel-eyebrow">Settings</p>
 							</div>
-							<button
-								type="button"
-								onClick={() => setSkipTravel((current) => !current)}
-								aria-pressed={skipTravel}
-							>
-								{skipTravel ? "On" : "Off"}
-							</button>
-						</div>
-
-						<div className="route-list">
-							{stops.map((stop) => (
+							<div className="pixel-card flex min-w-0 box-border items-center justify-between gap-4 bg-white/40 p-4">
+								<div className="flex min-w-0 flex-1 flex-col gap-1">
+									<strong className="truncate text-lg leading-tight">Instant Travel</strong>
+									<span className="font-dot-gothic text-xs text-ink-soft">Skip walking transitions between stops</span>
+								</div>
 								<button
 									type="button"
-									key={stop.id}
-									onClick={() => handleEnterStop(stop.id)}
-									disabled={Boolean(travelingTo) || Boolean(activeStopId)}
-									className={stop.id === "about" ? "is-recommended" : undefined}
+									className={`pixel-button px-4 py-2 text-sm transition-colors ${instantTravel ? 'bg-accent' : 'bg-white'}`}
+									onClick={() => setSkipTravel(!skipTravel)}
 								>
-									<span>{stop.order}</span>
-									<div>
-										<strong>{stop.shortLabel}</strong>
-										<p className="route-list__title">{stop.title}</p>
-										<p>{stop.recommendation}</p>
-									</div>
+									{instantTravel ? "Enabled" : "Disabled"}
 								</button>
-							))}
+							</div>
+						</div>
+
+						<div className="grid gap-4 pt-4">
+							{stops.map((stop) => {
+								const isCurrent = activeStopId === stop.id;
+								const isRecommended = stop.id === "about" || stop.id === "projects";
+
+								return (
+									<button
+										key={stop.id}
+										type="button"
+										className={`group flex min-w-0 box-border items-center gap-5 border-4 p-4 text-left transition-all ${
+											isCurrent
+												? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
+												: isRecommended
+													? "border-accent-strong/40 bg-accent/10 hover:bg-accent/20"
+													: "border-line-soft/10 bg-white/60 hover:bg-white"
+										}`}
+										onClick={() => {
+											handleEnterStop(stop.id);
+											setGuideOpen(false);
+										}}
+									>
+										<span className={`flex h-14 w-14 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-xl ${isCurrent ? 'bg-white' : 'bg-sky'}`}>
+											{stop.order}
+										</span>
+										<div className="flex min-w-0 flex-1 flex-col gap-1">
+											<div className="flex items-center gap-3">
+												<strong className="truncate text-xl leading-tight">{stop.title}</strong>
+												{isRecommended && (
+													<span className="shrink-0 bg-accent-strong px-2 py-0.5 font-dot-gothic text-[10px] uppercase text-white">
+														Recommended
+													</span>
+												)}
+											</div>
+											<p className="m-0 truncate text-lg leading-tight text-ink-soft">{stop.preview}</p>
+										</div>
+										<span className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 font-dot-gothic text-xl text-accent-strong animate-pixel-blink">▶</span>
+									</button>
+								);
+							})}
 						</div>
 					</section>
 				</div>
 			) : null}
 
-			{activeStop ? (
+			{activeStop && !guideOpen ? (
 				<div
-					className="window-backdrop"
+					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-6 backdrop-blur-md"
 					role="presentation"
 					onClick={handleCloseStop}
 				>
 					<section
-						className="window-shell"
+						className="pokedex-box flex w-[min(1360px,calc(100vw-2rem))] max-h-[min(92vh,980px)] flex-col overflow-hidden p-8"
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby="town-window-title"
 						onClick={(event) => event.stopPropagation()}
 					>
-						<div className="window-shell__header">
-							<div className="window-shell__title">
-								<span className="window-shell__order">{activeStop.order}</span>
+						<div className="flex flex-col gap-4 border-b border-line/10 pb-6 sm:flex-row sm:items-center sm:justify-between">
+							<div className="flex items-center gap-5">
+								<div className="flex h-16 w-14 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-2xl shadow-pixel">
+									{activeStop.order}
+								</div>
 								<div>
 									<p className="pixel-eyebrow">{activeStop.title}</p>
-									<h2 id="town-window-title">{activeStop.shortLabel}</h2>
+									<h2 className="m-0 font-dot-gothic text-3xl leading-tight" id="town-window-title">{activeStop.shortLabel}</h2>
 								</div>
 							</div>
-							<button type="button" onClick={handleCloseStop}>
-								Close
+							<button className="pixel-button px-6 py-3 text-lg" type="button" onClick={handleCloseStop}>
+								Close Room
 							</button>
 						</div>
 
-						<div className="window-shell__body">
-							<div className="window-shell__intro">
-								<div className="window-shell__intro-copy">
-									<p>{activeStop.subtitle}</p>
-									<span>Current stop</span>
+						<div className="flex-1 min-h-0 overflow-auto pr-2 pt-8 scrollbar-thin">
+							<div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-[1fr_320px]">
+								<div className="pixel-card flex flex-col gap-1 border-line-soft/10 bg-white/60 p-5">
+									<p className="m-0 text-2xl leading-tight text-ink">{activeStop.subtitle}</p>
+									<span className="font-dot-gothic text-xs uppercase tracking-widest text-ink-soft">Current stop</span>
 								</div>
-								<div className="window-shell__preview-card">
-									<p className="pixel-eyebrow">At A Glance</p>
-									<strong>{activeStop.preview}</strong>
+								<div className="pixel-card flex flex-col gap-2 bg-accent p-5 shadow-pixel">
+									<p className="pixel-eyebrow text-xs!">At A Glance</p>
+									<strong className="text-xl leading-tight">{activeStop.preview}</strong>
 								</div>
 							</div>
 

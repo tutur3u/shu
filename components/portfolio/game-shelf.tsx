@@ -149,66 +149,71 @@ export function GameShelf({
 	}
 
 	return (
-		<div className="game-shelf">
-			<section className="window-hero window-hero--compact arcade-hero">
-				<div className="window-kicker-row">
+		<div className="flex flex-col gap-6">
+			<section className="pokedex-box flex flex-col gap-6 p-8">
+				<div className="flex items-center justify-between gap-4">
 					<p className="pixel-eyebrow">{title}</p>
-					<span className="window-status">
+					<span className="font-dot-gothic text-base uppercase tracking-wider text-ink-soft">
 						{selectedIndex + 1}/{entries.length}
 					</span>
 				</div>
-				<div className="window-hero__split">
-					<div className="window-hero__body">
-						<h3>{selectedEntry.title}</h3>
-						<p className="window-hero__lede">{selectedEntry.role}</p>
-						<p>{selectedEntry.blurb}</p>
+				<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+					<div className="flex flex-col gap-4">
+						<h3 className="font-dot-gothic text-4xl leading-tight">{selectedEntry.title}</h3>
+						<p className="font-dot-gothic text-xl uppercase tracking-wide text-ink-soft">
+							{selectedEntry.role}
+						</p>
+						<p className="text-2xl leading-relaxed">{selectedEntry.blurb}</p>
 					</div>
 
-					<div className="window-chip-row">
-						<div className="window-chip">
-							<span>Category</span>
-							<strong>{selectedEntry.category}</strong>
-						</div>
-						<div className="window-chip">
-							<span>Role</span>
-							<strong>{selectedEntry.role}</strong>
-						</div>
-						<div className="window-chip">
-							<span>Format</span>
-							<strong>{selectedEntry.meta}</strong>
-						</div>
-						<div className="window-chip">
-							<span>Primary Link</span>
-							<strong>{selectedEntry.links[0]?.label ?? "Unavailable"}</strong>
-						</div>
+					<div className="flex flex-col gap-4 min-w-[280px]">
+						{[
+							{ label: "Category", value: selectedEntry.category },
+							{ label: "Role", value: selectedEntry.role },
+							{ label: "Format", value: selectedEntry.meta },
+							{ label: "Primary Link", value: selectedEntry.links[0]?.label ?? "Unavailable" }
+						].map((item) => (
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={item.label}>
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">
+									{item.label}
+								</span>
+								<strong className="text-xl leading-tight">{item.value}</strong>
+							</div>
+						))}
 					</div>
 				</div>
-				<p className="arcade-hero__caption">{description}</p>
+				<p className="m-0 border-t border-line/10 pt-4 text-xl leading-relaxed text-ink-soft">
+					{description}
+				</p>
 			</section>
 
-			<div className="window-grid game-shelf__layout">
-				<section className="window-panel arcade-panel">
-					<div className="arcade-panel__header">
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(380px,0.95fr)_minmax(0,1.05fr)]">
+				<section className="pokedex-box flex flex-col gap-5 p-6">
+					<div className="flex items-start justify-between gap-4">
 						<div>
 							<p className="pixel-eyebrow">Arcade Picker</p>
-							<h4>Choose A Build</h4>
+							<h4 className="m-0 font-dot-gothic text-2xl">Choose A Build</h4>
 						</div>
-						<span className="window-panel__badge">Keyboard Ready</span>
+						<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
+							Keyboard Ready
+						</span>
 					</div>
 
-					<div className="arcade-panel__subheader">
-						<div className="arcade-panel__legend" id={helperId}>
-							<span className="arcade-panel__legend-pill">↑↓ Move</span>
-							<span className="arcade-panel__legend-pill">Home/End Jump</span>
-							<span className="arcade-panel__legend-pill">Type Search</span>
-							<span className="arcade-panel__legend-pill">Enter Launch</span>
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+						<div className="flex flex-wrap gap-2" id={helperId}>
+							{["↑↓ Move", "Home/End Jump", "Type Search", "Enter Launch"].map((hint) => (
+								<span className="inline-flex items-center justify-center border-2 border-line/10 bg-white px-3 py-1 font-dot-gothic text-xs uppercase" key={hint}>
+									{hint}
+								</span>
+							))}
 						</div>
-						<div className="arcade-panel__actions">
+						<div className="flex gap-3">
 							<button
 								type="button"
 								onClick={() => moveSelection(selectedIndex - 1, true)}
 								disabled={selectedIndex === 0}
 								aria-label="Select previous game"
+								className="pixel-button px-4 py-2 text-sm disabled:opacity-50"
 							>
 								Prev
 							</button>
@@ -217,6 +222,7 @@ export function GameShelf({
 								onClick={() => moveSelection(selectedIndex + 1, true)}
 								disabled={selectedIndex === entries.length - 1}
 								aria-label="Select next game"
+								className="pixel-button px-4 py-2 text-sm disabled:opacity-50"
 							>
 								Next
 							</button>
@@ -226,7 +232,7 @@ export function GameShelf({
 					<ul
 						aria-describedby={helperId}
 						aria-label="Game shelf picker"
-						className="arcade-list"
+						className="m-0 max-h-[800px] list-none overflow-auto p-0 pr-2 scrollbar-thin"
 						id={listboxId}
 						role="listbox"
 					>
@@ -234,13 +240,17 @@ export function GameShelf({
 							const isSelected = index === selectedIndex;
 
 							return (
-								<li key={entry.title}>
+								<li key={entry.title} className="mb-3 last:mb-0">
 									<button
 										ref={(node) => {
 											optionRefs.current[index] = node;
 										}}
 										aria-selected={isSelected}
-										className={`arcade-list__option ${isSelected ? "is-selected" : ""}`}
+										className={`flex w-full items-center gap-4 border-4 bg-panel px-4 py-4 text-left transition-all ${
+											isSelected
+												? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
+												: "border-line-soft/20 hover:border-line/20"
+										}`}
 										onClick={() => moveSelection(index)}
 										onFocus={() => setSelectedIndex(index)}
 										onKeyDown={(event) => handleOptionKeyDown(index, event)}
@@ -248,19 +258,25 @@ export function GameShelf({
 										tabIndex={isSelected ? 0 : -1}
 										type="button"
 									>
-										<span className="arcade-list__index">
+										<span className={`flex h-12 w-12 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-base ${isSelected ? 'bg-white' : 'bg-sky'}`}>
 											{String(index + 1).padStart(2, "0")}
 										</span>
-										<span className="arcade-list__copy">
-											<span className="arcade-list__title-row">
-												<strong>{entry.title}</strong>
-												{isSelected ? (
-													<span className="arcade-list__active">Selected</span>
-												) : null}
+										<span className="flex min-w-0 flex-col gap-1">
+											<span className="flex items-center gap-3">
+												<strong className="truncate text-xl leading-tight">{entry.title}</strong>
+												{isSelected && (
+													<span className="inline-flex items-center justify-center bg-black/10 px-2 py-0.5 font-dot-gothic text-xs uppercase">
+														Selected
+													</span>
+												)}
 											</span>
-											<span>{entry.category}</span>
+											<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">
+												{entry.category}
+											</span>
 										</span>
-										<span className="arcade-list__meta">{entry.meta}</span>
+										<span className="ml-auto font-dot-gothic text-xs uppercase tracking-wider text-ink-soft sm:block hidden">
+											{entry.meta}
+										</span>
 									</button>
 								</li>
 							);
@@ -268,72 +284,79 @@ export function GameShelf({
 					</ul>
 				</section>
 
-				<section className="window-panel arcade-detail">
-					<div className="arcade-detail__masthead">
-						<div className="arcade-detail__title-block">
+				<section className="pokedex-box relative flex flex-col gap-6 overflow-hidden p-6">
+					<div className="flex items-start justify-between gap-4">
+						<div className="flex min-w-0 flex-col gap-2">
 							<p className="pixel-eyebrow">Now Highlighted</p>
-							<div className="arcade-detail__title-row">
-								<h4>{selectedEntry.title}</h4>
-								<span className="window-panel__badge">{selectedEntry.meta}</span>
+							<div className="flex items-start justify-between gap-4">
+								<h4 className="m-0 font-dot-gothic text-3xl leading-tight">{selectedEntry.title}</h4>
+								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
+									{selectedEntry.meta}
+								</span>
 							</div>
-							<p className="arcade-detail__role">{selectedEntry.role}</p>
+							<p className="m-0 font-dot-gothic text-lg text-ink-soft">{selectedEntry.role}</p>
 						</div>
-						<div className="arcade-detail__stamp" aria-hidden="true">
+						<div className="flex h-20 w-20 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-2xl shadow-pixel" aria-hidden="true">
 							{String(selectedIndex + 1).padStart(2, "0")}
 						</div>
 					</div>
 
-					<div className="arcade-detail__summary-card">
-						<p className="pixel-eyebrow">Build Readout</p>
-						<p className="arcade-detail__summary">{selectedEntry.blurb}</p>
+					<div className="pixel-card flex flex-col gap-3 bg-panel-strong p-5">
+						<p className="pixel-eyebrow text-xs!">Build Readout</p>
+						<p className="text-xl leading-relaxed">{selectedEntry.blurb}</p>
 					</div>
 
-					<div className="arcade-detail__signal-grid">
-						<div className="arcade-detail__signal-card">
-							<span>Category</span>
-							<strong>{selectedEntry.category}</strong>
-						</div>
-						<div className="arcade-detail__signal-card">
-							<span>Primary Link</span>
-							<strong>{primaryLink?.label ?? "Unavailable"}</strong>
-						</div>
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						{[
+							{ label: "Category", value: selectedEntry.category },
+							{ label: "Primary Link", value: primaryLink?.label ?? "Unavailable" }
+						].map((item) => (
+							<div className="pixel-card flex flex-col gap-1 bg-white/60 p-4" key={item.label}>
+								<span className="font-dot-gothic text-[10px] uppercase tracking-widest text-ink-soft">
+									{item.label}
+								</span>
+								<strong className="text-base leading-tight">{item.value}</strong>
+							</div>
+						))}
 					</div>
 
-					<section className="arcade-detail__section">
-						<div className="arcade-detail__section-head">
+					<section className="flex flex-col gap-4">
+						<div className="flex items-center justify-between gap-4">
 							<p className="pixel-eyebrow">Why Open This</p>
-							<span className="arcade-detail__section-count">
+							<span className="font-dot-gothic text-[10px] uppercase tracking-widest text-ink-soft">
 								{selectedEntry.highlights.length} notes
 							</span>
 						</div>
 
-						<div className="arcade-detail__highlight-grid">
+						<div className="grid gap-4">
 							{selectedEntry.highlights.map((highlight, index) => (
-								<article className="arcade-detail__highlight-card" key={highlight}>
-									<span>{String(index + 1).padStart(2, "0")}</span>
-									<p>{highlight}</p>
+								<article className="pixel-card grid grid-cols-[50px_1fr] items-start gap-4 bg-white/60 p-4" key={highlight}>
+									<span className="font-dot-gothic text-xs text-ink-soft">
+										{String(index + 1).padStart(2, "0")}
+									</span>
+									<p className="m-0 text-lg leading-relaxed">{highlight}</p>
 								</article>
 							))}
 						</div>
 					</section>
 
-					<div className="arcade-detail__footer">
-						{primaryLink ? (
+					<div className="mt-auto flex flex-col gap-4 pt-4">
+						{primaryLink && (
 							<a
-								className="route-link arcade-detail__primary"
+								className="pixel-button flex min-h-[64px] items-center justify-center text-xl shadow-pixel-strong"
 								href={primaryLink.url}
 								target="_blank"
 								rel="noreferrer"
 							>
 								Play {primaryLink.label}
 							</a>
-						) : null}
+						)}
 
-						{secondaryLinks.length ? (
-							<div className="arcade-detail__links">
+						{secondaryLinks.length > 0 && (
+							<div className="flex flex-wrap gap-4">
 								{secondaryLinks.map((link) => (
 									<a
-										className="route-link route-link--secondary"
+										className="pixel-button inline-flex flex-1 items-center justify-center bg-white px-6 py-3 text-lg"
 										href={link.url}
 										key={link.url}
 										target="_blank"
@@ -343,10 +366,10 @@ export function GameShelf({
 									</a>
 								))}
 							</div>
-						) : null}
+						)}
 
-						<p className="arcade-detail__hint">
-							Press <kbd>Enter</kbd> from the picker to launch the primary build instantly.
+						<p className="m-0 text-center font-dot-gothic text-sm text-ink-soft">
+							Press <kbd className="mx-1 border-2 border-line/10 bg-white px-2 py-0.5 align-middle">Enter</kbd> from the picker to launch.
 						</p>
 					</div>
 				</section>

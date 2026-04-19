@@ -496,217 +496,217 @@ export function MapDevTool({
 
 	return (
 		<div
-			className="dev-tool"
+			className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-6 backdrop-blur-md"
 			role="presentation"
 			onClick={() => onOpenChange(false)}
 		>
 			<section
-				className="dev-tool__panel"
+				className="pokedex-box flex w-[min(800px,calc(100vw-2rem))] max-h-[min(92vh,960px)] flex-col gap-6 overflow-auto p-8 scrollbar-thin"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="dev-map-tool-title"
 				onClick={(event) => event.stopPropagation()}
 			>
-				<div className="window-shell__header">
+				<div className="flex items-center justify-between gap-4 border-b border-line/10 pb-4">
 					<div>
 						<p className="pixel-eyebrow">Development Overlay</p>
-						<h2 id="dev-map-tool-title">Map Editor</h2>
+						<h2 className="m-0 font-dot-gothic text-2xl leading-tight" id="dev-map-tool-title">Map Editor</h2>
 					</div>
-					<button type="button" onClick={() => onOpenChange(false)}>
+					<button className="pixel-button px-4 py-2 text-sm" type="button" onClick={() => onOpenChange(false)}>
 						Close
 					</button>
 				</div>
 
-				<label className="dev-tool__field">
-					<span>Mode</span>
-					<select
-						value={mode}
-						onChange={(event) => onModeChange(event.target.value as DevToolMode)}
-					>
-						<option value="all">All Layers</option>
-						<option value="walkable">Walkable Polygon</option>
-						<option value="blocked">Blocked Polygon</option>
-						<option value="section">Section Polygon</option>
-						<option value="stop-outline">Stop Outline</option>
-						<option value="stop-info">Stop Info Anchor</option>
-						<option value="stop-door">Stop Door</option>
-						<option value="stop-exit">Stop Exit</option>
-					</select>
-				</label>
-
-				<div className="dev-tool__callout">
-					<strong>{modeDescription.title}</strong>
-					<p>{modeDescription.body}</p>
-				</div>
-
-				<div className="dev-tool__field">
-					<span>Interaction</span>
-					<div className="dev-tool__segmented">
-						<button
-							type="button"
-							className={interactionMode === "view" ? "is-active" : undefined}
-							onClick={() => onInteractionModeChange("view")}
-						>
-							View
-						</button>
-						<button
-							type="button"
-							className={interactionMode === "capture" ? "is-active" : undefined}
-							onClick={() => onInteractionModeChange("capture")}
-							disabled={mode === "all"}
-						>
-							Capture
-						</button>
-						<button
-							type="button"
-							className={interactionMode === "move" ? "is-active" : undefined}
-							onClick={() => onInteractionModeChange("move")}
-						>
-							Move
-						</button>
-					</div>
-				</div>
-
-				<div className="dev-tool__callout dev-tool__callout--soft">
-					<strong>{interactionDescription.title}</strong>
-					<p>{interactionDescription.body}</p>
-				</div>
-
-				{mode === "all" ? (
-					<section className="dev-tool__overview">
-						<p className="dev-tool__empty">
-							All Layers acts like a polished preview by default: destination
-							outlines stay on, heavy debug layers stay off, and you can turn on
-							extra overlays only when you need them.
-						</p>
-					</section>
-				) : isPolygonMode(mode) ? (
-					<div className="dev-tool__field">
-						<div className="dev-tool__field-header">
-							<span>{POLYGON_LABELS[mode]} zones</span>
-							<div className="dev-tool__mini-actions">
-								<button type="button" onClick={onCreatePolygonZone}>
-									New zone
-								</button>
-								<button
-									type="button"
-									onClick={onDeleteActivePolygonZone}
-									disabled={!polygonZones.some((entry) => entry.id === activeRegionId)}
-								>
-									Delete
-								</button>
-							</div>
-						</div>
-
-						<div className="dev-tool__zone-list">
-							{polygonZones.length ? (
-								polygonZones.map((entry) => (
-									<button
-										type="button"
-										key={`${entry.kind}-${entry.id}`}
-										className={
-											entry.id === activeRegionId ? "is-active" : undefined
-										}
-										onClick={() => setActiveRegionId(entry.id)}
-									>
-										<strong>{entry.id}</strong>
-										<span>{entry.points.length} pts</span>
-									</button>
-								))
-							) : (
-								<p className="dev-tool__empty">
-									No {mode} zones yet. Create one, then switch to Capture.
-								</p>
-							)}
-						</div>
-
-						<label className="dev-tool__field">
-							<span>Zone ID</span>
-							<input
-								type="text"
-								value={activeRegionId}
-								onChange={(event) => setActiveRegionId(event.target.value)}
-								placeholder={`${mode}-main`}
-							/>
-						</label>
-					</div>
-				) : (
-					<label className="dev-tool__field">
-						<span>Stop</span>
+				<div className="flex flex-col gap-6">
+					<label className="flex flex-col gap-2">
+						<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Mode</span>
 						<select
-							value={selectedStopId}
-							onChange={(event) => setSelectedStopId(event.target.value as StopId)}
+							className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+							value={mode}
+							onChange={(event) => onModeChange(event.target.value as DevToolMode)}
 						>
-							{stops.map((stop) => (
-								<option key={stop.id} value={stop.id}>
-									{stop.id}
-								</option>
-							))}
+							<option value="all">All Layers</option>
+							<option value="walkable">Walkable Polygon</option>
+							<option value="blocked">Blocked Polygon</option>
+							<option value="section">Section Polygon</option>
+							<option value="stop-outline">Stop Outline</option>
+							<option value="stop-info">Stop Info Anchor</option>
+							<option value="stop-door">Stop Door</option>
+							<option value="stop-exit">Stop Exit</option>
 						</select>
 					</label>
-				)}
 
-				<div className="dev-tool__field">
-					<span>Visible layers for this mode</span>
-					<div className="dev-tool__layers">
-						{visibleLayers.map((layer) => (
-							<label className="dev-tool__checkbox" key={layer.key}>
+					<div className="pixel-card border-line-soft bg-white/60 p-4">
+						<strong className="font-dot-gothic text-base uppercase tracking-wide">{modeDescription.title}</strong>
+						<p className="m-0 mt-1 text-lg leading-snug text-ink-soft">{modeDescription.body}</p>
+					</div>
+
+					<div className="flex flex-col gap-4">
+						<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Interaction</span>
+						<div className="grid grid-cols-3 gap-3">
+							{(["view", "capture", "move"] as DevInteractionMode[]).map((intMode) => (
+								<button
+									key={intMode}
+									type="button"
+									className={`pixel-button py-2 text-sm ${
+										interactionMode === intMode ? "bg-accent" : "bg-panel-strong"
+									}`}
+									onClick={() => onInteractionModeChange(intMode)}
+									disabled={intMode === "capture" && mode === "all"}
+								>
+									{intMode}
+								</button>
+							))}
+						</div>
+						<div className="pixel-card border-line-soft bg-white/40 p-4">
+							<strong className="font-dot-gothic text-base uppercase tracking-wide">{interactionDescription.title}</strong>
+							<p className="m-0 mt-1 text-lg leading-snug text-ink-soft">{interactionDescription.body}</p>
+						</div>
+					</div>
+
+					{mode === "all" ? (
+						<div className="pixel-card bg-white/40 p-5 text-center">
+							<p className="m-0 text-lg leading-relaxed text-ink-soft">
+								All Layers acts like a polished preview by default. Editing layers stay off until manually toggled below.
+							</p>
+						</div>
+					) : isPolygonMode(mode) ? (
+						<div className="flex flex-col gap-4">
+							<div className="flex items-center justify-between gap-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{POLYGON_LABELS[mode]} zones</span>
+								<div className="flex gap-2">
+									<button className="pixel-button bg-sky px-3 py-1 text-xs" type="button" onClick={onCreatePolygonZone}>
+										New
+									</button>
+									<button
+										className="pixel-button bg-line px-3 py-1 text-xs text-white"
+										type="button"
+										onClick={onDeleteActivePolygonZone}
+										disabled={!polygonZones.some((entry) => entry.id === activeRegionId)}
+									>
+										Del
+									</button>
+								</div>
+							</div>
+
+							<div className="grid grid-cols-2 gap-3">
+								{polygonZones.length ? (
+									polygonZones.map((entry) => (
+										<button
+											type="button"
+											key={`${entry.kind}-${entry.id}`}
+											className={`pixel-card flex items-center justify-between px-4 py-2 text-left ${
+												entry.id === activeRegionId ? "border-accent bg-accent/20" : "bg-white/40"
+											}`}
+											onClick={() => setActiveRegionId(entry.id)}
+										>
+											<strong className="text-sm">{entry.id}</strong>
+											<span className="font-dot-gothic text-xs text-ink-soft">{entry.points.length} pts</span>
+										</button>
+									))
+								) : (
+									<p className="col-span-2 py-4 text-center text-lg text-ink-soft">No {mode} zones yet.</p>
+								)}
+							</div>
+
+							<label className="flex flex-col gap-2">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Zone ID</span>
 								<input
-									type="checkbox"
-									checked={layerVisibility[layer.key]}
-									onChange={(event) =>
-										onLayerVisibilityChange(layer.key, event.target.checked)
-									}
+									className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+									type="text"
+									value={activeRegionId}
+									onChange={(event) => setActiveRegionId(event.target.value)}
+									placeholder={`${mode}-main`}
 								/>
-								<span>{layer.label}</span>
 							</label>
+						</div>
+					) : (
+						<label className="flex flex-col gap-2">
+							<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Stop</span>
+							<select
+								className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+								value={selectedStopId}
+								onChange={(event) => setSelectedStopId(event.target.value as StopId)}
+							>
+								{stops.map((stop) => (
+									<option key={stop.id} value={stop.id}>
+										{stop.id}
+									</option>
+								))}
+							</select>
+						</label>
+					)}
+
+					<div className="flex flex-col gap-4">
+						<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Visibility</span>
+						<div className="grid grid-cols-2 gap-4">
+							{visibleLayers.map((layer) => (
+								<label className="pixel-card flex items-center gap-3 bg-white/40 p-3" key={layer.key}>
+									<input
+										className="h-5 w-5 accent-accent"
+										type="checkbox"
+										checked={layerVisibility[layer.key]}
+										onChange={(event) =>
+											onLayerVisibilityChange(layer.key, event.target.checked)
+										}
+									/>
+									<span className="font-dot-gothic text-sm uppercase tracking-tight">{layer.label}</span>
+								</label>
+							))}
+						</div>
+					</div>
+
+					<p className="m-0 text-center font-dot-gothic text-base tracking-wide text-accent-strong">{activeSummary}</p>
+
+					<div className="grid grid-cols-2 gap-4">
+						{[
+							{ label: "Undo", action: onUndoActive, color: "bg-panel-strong" },
+							{ label: "Clear", action: onClearActive, color: "bg-panel-strong" },
+							{
+								label: copiedLabel === "active" ? "Copied!" : "Copy Active",
+								action: () => {
+									onCopyActive();
+									setCopiedLabel("active");
+									window.setTimeout(() => setCopiedLabel(null), 1200);
+								},
+								color: "bg-accent"
+							},
+							{
+								label: copiedLabel === "all" ? "Copied!" : "Copy All",
+								action: () => {
+									onCopyAll();
+									setCopiedLabel("all");
+									window.setTimeout(() => setCopiedLabel(null), 1200);
+								},
+								color: "bg-accent"
+							}
+						].map((btn) => (
+							<button
+								key={btn.label}
+								type="button"
+								className={`pixel-button py-3 text-sm ${btn.color}`}
+								onClick={btn.action}
+							>
+								{btn.label}
+							</button>
 						))}
 					</div>
+
+					<div className="flex flex-col gap-4">
+						<p className="m-0 border-l-4 border-line/20 pl-4 text-base italic leading-snug text-ink-soft">
+							{interactionMode === "capture"
+								? "Click on the map to add points or place anchors. Existing handles stay hidden while drawing."
+								: interactionMode === "move"
+									? "Drag visible handles directly on the map to reposition them."
+									: "View mode leaves the map interactive while keeping editor overlays visible."}
+						</p>
+						<textarea
+							className="pixel-card mt-2 min-h-[240px] bg-ink/5 p-4 font-mono text-xs leading-relaxed"
+							readOnly
+							value={activeSnippet}
+						/>
+					</div>
 				</div>
-
-				<p className="dev-tool__summary">{activeSummary}</p>
-
-				<div className="dev-tool__actions">
-					<button type="button" onClick={onUndoActive}>
-						Undo
-					</button>
-					<button type="button" onClick={onClearActive}>
-						Clear
-					</button>
-					<button
-						type="button"
-						onClick={() => {
-							onCopyActive();
-							setCopiedLabel("active");
-							window.setTimeout(() => setCopiedLabel(null), 1200);
-						}}
-					>
-						Copy Active
-					</button>
-					<button
-						type="button"
-						onClick={() => {
-							onCopyAll();
-							setCopiedLabel("all");
-							window.setTimeout(() => setCopiedLabel(null), 1200);
-						}}
-					>
-						Copy All
-					</button>
-				</div>
-
-				<p className="dev-tool__hint">
-					{interactionMode === "capture"
-						? "Click on the map to add points or place anchors. Existing handles stay hidden while drawing."
-						: interactionMode === "move"
-							? "Drag visible handles directly on the map to reposition them."
-							: "View mode leaves the map interactive while keeping editor overlays visible."}
-				</p>
-				<p className="dev-tool__hint">
-					{copiedLabel ? `Copied ${copiedLabel} snippet.` : ""}
-				</p>
-
-				<textarea readOnly value={activeSnippet} rows={12} />
 			</section>
 		</div>
 	);

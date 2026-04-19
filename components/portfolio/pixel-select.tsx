@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { ShowcaseEntry } from "@/lib/portfolio-content";
 
@@ -18,122 +18,230 @@ export function PixelSelect({
 	entries: ShowcaseEntry[];
 }) {
 	const [selectedIndex, setSelectedIndex] = useState(0);
-	const visibleCount = 5;
-	const maxWindowStart = Math.max(entries.length - visibleCount, 0);
-	const windowStart = clamp(selectedIndex - 2, 0, maxWindowStart);
-	const visibleEntries = entries.slice(windowStart, windowStart + visibleCount);
-	const selectedEntry = entries[selectedIndex];
+	const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+	const typeaheadRef = useRef("");
+	const typeaheadTimerRef = useRef<number | null>(null);
+	const autoFocusedRef = useRef(false);
+	const listboxId = useId();
+	const helperId = useId();
 
-	function moveSelection(nextIndex: number) {
-		setSelectedIndex(clamp(nextIndex, 0, entries.length - 1));
+	const selectedEntry = entries[selectedIndex];
+	const primaryLink = selectedEntry.links[0] ?? null;
+
+	useEffect(() => {
+		optionRefs.current[selectedIndex]?.scrollIntoView({
+			block: "nearest",
+			inline: "nearest",
+		});
+	}, [selectedIndex]);
+
+	useEffect(() => {
+		return () => {
+			if (typeaheadTimerRef.current) {
+				window.clearTimeout(typeaheadTimerRef.current);
+			}
+		};
+	}, []);
+
+	function focusOption(index: number) {
+		window.requestAnimationFrame(() => {
+			optionRefs.current[index]?.focus();
+		});
 	}
 
-	function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+	useEffect(() => {
+		if (autoFocusedRef.current || entries.length === 0) {
+			return;
+		}
+
+		autoFocusedRef.current = true;
+		focusOption(selectedIndex);
+	}, [entries.length, selectedIndex]);
+
+	function moveSelection(nextIndex: number, shouldFocus = false) {
+		const clampedIndex = clamp(nextIndex, 0, entries.length - 1);
+		setSelectedIndex(clampedIndex);
+
+		if (shouldFocus) {
+			focusOption(clampedIndex);
+		}
+	}
+
+	function openPrimaryLink(index: number) {
+		const primaryLink = entries[index]?.links[0];
+
+		if (!primaryLink) {
+			return;
+		}
+
+		window.open(primaryLink.url, "_blank", "noopener,noreferrer");
+	}
+
+	function handleTypeahead(key: string) {
+		if (!key.trim()) {
+			return;
+		}
+
+		typeaheadRef.current = `${typeaheadRef.current}${key.toLowerCase()}`;
+
+		if (typeaheadTimerRef.current) {
+			window.clearTimeout(typeaheadTimerRef.current);
+		}
+
+		typeaheadTimerRef.current = window.setTimeout(() => {
+			typeaheadRef.current = "";
+		}, 450);
+
+		const currentIndex = selectedIndex;
+		const searchTerm = typeaheadRef.current;
+		const wrappedEntries = [...entries.slice(currentIndex + 1), ...entries.slice(0, currentIndex + 1)];
+		const match = wrappedEntries.find((entry) =>
+			entry.title.toLowerCase().startsWith(searchTerm),
+		);
+
+		if (!match) {
+			return;
+		}
+
+		const nextIndex = entries.findIndex((entry) => entry.title === match.title);
+		moveSelection(nextIndex, true);
+	}
+
+	function handleOptionKeyDown(index: number, event: KeyboardEvent<HTMLButtonElement>) {
 		switch (event.key) {
 			case "ArrowUp":
+			case "ArrowLeft":
 				event.preventDefault();
-				moveSelection(selectedIndex - 1);
+				moveSelection(index - 1, true);
 				break;
 			case "ArrowDown":
+			case "ArrowRight":
 				event.preventDefault();
-				moveSelection(selectedIndex + 1);
+				moveSelection(index + 1, true);
 				break;
 			case "Home":
 				event.preventDefault();
-				moveSelection(0);
+				moveSelection(0, true);
 				break;
 			case "End":
 				event.preventDefault();
-				moveSelection(entries.length - 1);
+				moveSelection(entries.length - 1, true);
+				break;
+			case "PageUp":
+				event.preventDefault();
+				moveSelection(index - 3, true);
+				break;
+			case "PageDown":
+				event.preventDefault();
+				moveSelection(index + 3, true);
+				break;
+			case "Enter":
+			case " ":
+				event.preventDefault();
+				openPrimaryLink(index);
 				break;
 			default:
+				if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+					handleTypeahead(event.key);
+				}
 				break;
 		}
 	}
 
 	return (
-		<div className="selection-card">
-			<div className="selection-copy">
-				<div className="selection-copy__header">
+		<div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(420px,1fr)_minmax(0,1.2fr)]">
+			<div className="pixel-card flex flex-col gap-6 p-8">
+				<div className="flex items-center justify-between gap-4">
 					<p className="pixel-eyebrow">{title}</p>
-					<span className="selection-copy__count">
+					<span className="font-dot-gothic text-base tracking-wider text-ink-soft">
 						{selectedIndex + 1}/{entries.length}
 					</span>
 				</div>
-				<h3>{selectedEntry.title}</h3>
-				<p className="selection-copy__lede">{selectedEntry.blurb}</p>
-				<p>{description}</p>
-				<div className="selection-copy__meta">
-					<div className="selection-copy__meta-card">
-						<span>Category</span>
-						<strong>{selectedEntry.category}</strong>
-					</div>
-					<div className="selection-copy__meta-card">
-						<span>Role</span>
-						<strong>{selectedEntry.role}</strong>
-					</div>
-					<div className="selection-copy__meta-card">
-						<span>Format</span>
-						<strong>{selectedEntry.meta}</strong>
-					</div>
-					<div className="selection-copy__meta-card">
-						<span>Status</span>
-						<strong>{selectedEntry.featured ? "Featured" : "Available"}</strong>
-					</div>
+				<h3 className="font-dot-gothic text-4xl leading-tight">{selectedEntry.title}</h3>
+				<p className="m-0 text-2xl leading-relaxed">{selectedEntry.blurb}</p>
+				<p className="mt-4 border-l-6 border-accent bg-black/5 p-4 text-xl leading-relaxed text-ink-soft">
+					{description} Launch with <kbd className="mx-2 inline-block border-2 border-line-soft bg-white px-2 align-middle font-dot-gothic text-base">Enter</kbd>.
+				</p>
+				<div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+					{[
+						{ label: "Category", value: selectedEntry.category },
+						{ label: "Role", value: selectedEntry.role },
+						{ label: "Format", value: selectedEntry.meta },
+						{ label: "Status", value: selectedEntry.featured ? "Featured" : "Available" }
+					].map((item) => (
+						<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={item.label}>
+							<span className="font-dot-gothic text-sm tracking-wider text-ink-soft uppercase">{item.label}</span>
+							<strong className="text-xl leading-tight">{item.value}</strong>
+						</div>
+					))}
 				</div>
 			</div>
 
-			<div
-				className="selection-frame"
-				tabIndex={0}
-				onKeyDown={handleKeyDown}
-				aria-label={`${title} selection list`}
-			>
-				<div className="retro-list">
-					<div className="retro-list__header">
-						<span>{title}</span>
-						<span>
-							{selectedIndex + 1}/{entries.length}
-						</span>
+			<div className="grid grid-cols-1 gap-6 outline-none focus-visible:ring-4 focus-visible:ring-accent">
+				<div className="pixel-card flex flex-col gap-6 p-8">
+					<div className="flex items-center justify-between gap-4 font-dot-gothic text-base uppercase">
+						<span>Project List</span>
+						<span id={helperId}>Arrows to move</span>
 					</div>
 
-					<div className="retro-list__shell">
-						<div className="retro-list__controls">
+					<div className="mt-6 grid grid-cols-[60px_1fr] gap-6">
+						<div className="flex flex-col gap-4">
 							<button
 								type="button"
-								onClick={() => moveSelection(selectedIndex - 1)}
+								onClick={() => moveSelection(selectedIndex - 1, true)}
 								disabled={selectedIndex === 0}
 								aria-label={`Scroll ${title} up`}
+								className="pixel-button h-14 w-full"
 							>
 								▲
 							</button>
 							<button
 								type="button"
-								onClick={() => moveSelection(selectedIndex + 1)}
+								onClick={() => moveSelection(selectedIndex + 1, true)}
 								disabled={selectedIndex === entries.length - 1}
 								aria-label={`Scroll ${title} down`}
+								className="pixel-button h-14 w-full"
 							>
 								▼
 							</button>
 						</div>
 
-						<ul className="retro-list__entries">
-							{visibleEntries.map((entry, index) => {
-								const actualIndex = windowStart + index;
-								const isSelected = actualIndex === selectedIndex;
+						<ul
+							className="m-0 max-h-[500px] list-none overflow-auto p-0 pr-4 scrollbar-thin"
+							id={listboxId}
+							role="listbox"
+							aria-describedby={helperId}
+							aria-label={`${title} selection list`}
+						>
+							{entries.map((entry, index) => {
+								const isSelected = index === selectedIndex;
 
 								return (
-									<li key={entry.title}>
+									<li key={entry.title} className="mb-4 last:mb-0">
 										<button
+											ref={(node) => {
+												optionRefs.current[index] = node;
+											}}
 											type="button"
-											onClick={() => moveSelection(actualIndex)}
-											className={isSelected ? "is-selected" : undefined}
+											role="option"
+											aria-selected={isSelected}
+											tabIndex={isSelected ? 0 : -1}
+											onClick={() => moveSelection(index)}
+											onFocus={() => setSelectedIndex(index)}
+											onKeyDown={(event) => handleOptionKeyDown(index, event)}
+											className={`flex w-full items-center gap-5 border-4 px-6 py-4 text-left transition-all ${
+												isSelected
+													? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
+													: "border-transparent bg-panel-strong/40 hover:border-line/20"
+											}`}
 										>
-											<span className="retro-list__caret">
+											<span className="w-8 font-dot-gothic text-2xl text-accent-strong animate-caret-blink">
 												{isSelected ? "▶" : ""}
 											</span>
-											<span className="retro-list__name">{entry.title}</span>
-											<span className="retro-list__meta">{entry.meta}</span>
+											<span className="text-2xl leading-tight">{entry.title}</span>
+											<span className="ml-auto font-dot-gothic text-sm text-ink-soft uppercase tracking-wider hidden sm:block">
+												{entry.meta}
+											</span>
 										</button>
 									</li>
 								);
@@ -142,29 +250,39 @@ export function PixelSelect({
 					</div>
 				</div>
 
-				<div className="detail-card">
-					<div className="detail-card__meta">
+				<div className="pixel-card flex flex-col gap-6 bg-panel-strong p-8">
+					<div className="flex items-center justify-between gap-4 font-dot-gothic text-base uppercase">
 						<span>{selectedEntry.category}</span>
 						<span>{selectedEntry.meta}</span>
 					</div>
-					<div className="detail-card__header">
-						<div>
-							<h4>{selectedEntry.title}</h4>
-							<p className="detail-card__role">{selectedEntry.role}</p>
+					<div className="flex items-start justify-between gap-4">
+						<div className="flex flex-col gap-2">
+							<h4 className="m-0 text-3xl leading-tight">{selectedEntry.title}</h4>
+							<p className="font-dot-gothic text-xl text-ink-soft uppercase tracking-wide">{selectedEntry.role}</p>
 						</div>
 						{selectedEntry.featured ? (
-							<span className="detail-card__badge">Featured</span>
+							<span className="pixel-button bg-accent px-4 py-1 font-dot-gothic text-sm shadow-none!">
+								Featured
+							</span>
 						) : null}
 					</div>
-					<p>{selectedEntry.blurb}</p>
-					<ul className="detail-card__list">
+					<p className="text-2xl leading-relaxed">{selectedEntry.blurb}</p>
+					<ul className="m-0 mt-2 flex flex-col gap-4 pl-8 list-disc">
 						{selectedEntry.highlights.map((highlight) => (
-							<li key={highlight}>{highlight}</li>
+							<li key={highlight} className="text-xl leading-relaxed">
+								{highlight}
+							</li>
 						))}
 					</ul>
-					<div className="detail-card__links">
+					<div className="mt-auto grid gap-6 pt-8">
 						{selectedEntry.links.map((link) => (
-							<a key={link.url} href={link.url} target="_blank" rel="noreferrer">
+							<a
+								className="pixel-button inline-flex items-center justify-center py-4 text-2xl shadow-pixel-strong"
+								key={link.url}
+								href={link.url}
+								target="_blank"
+								rel="noreferrer"
+							>
 								Open {link.label}
 							</a>
 						))}

@@ -59,6 +59,7 @@ export function TownMapOverlay({
 	devRegionId,
 	devSelectedStopId,
 	effectiveLayerVisibility,
+	facing,
 	focusStopId,
 	isDev,
 	onDragTargetChange,
@@ -82,6 +83,7 @@ export function TownMapOverlay({
 	devRegionId: string;
 	devSelectedStopId: StopId;
 	effectiveLayerVisibility: DevLayerVisibility;
+	facing: "up" | "down" | "left" | "right";
 	focusStopId: StopId | null;
 	isDev: boolean;
 	onDragTargetChange: (target: DragTarget | null) => void;
@@ -237,9 +239,9 @@ export function TownMapOverlay({
 					(showPointHandles || effectiveLayerVisibility.stopAnchors);
 				const outlineStroke =
 					isVisible || isActive
-						? "rgba(255, 246, 196, 0.76)"
-						: "rgba(255, 244, 184, 0.34)";
-				const outlineWidth = isVisible || isActive ? 2.7 : 2.1;
+						? "#ffffff"
+						: "rgba(255, 255, 255, 0.4)";
+				const outlineWidth = isVisible || isActive ? 4 : 2;
 
 				return (
 					<g
@@ -257,16 +259,22 @@ export function TownMapOverlay({
 							onEnterStop(stop.id);
 						}}
 					>
-						<polygon className="house-group__hit" points={polygon} fill="transparent" />
+						<polygon 
+							className="house-group__hit" 
+							points={polygon} 
+							fill="white" 
+							fillOpacity="0" 
+						/>
 						<rect
 							className="house-group__nav-outline"
 							x={outlineBounds.x}
 							y={outlineBounds.y}
 							width={outlineBounds.width}
 							height={outlineBounds.height}
-							rx="18"
-							ry="18"
-							fill="none"
+							rx="0"
+							ry="0"
+							fill="white"
+							fillOpacity="0"
 							stroke={outlineStroke}
 							strokeWidth={outlineWidth}
 						/>
@@ -368,23 +376,118 @@ export function TownMapOverlay({
 								) : null}
 							</g>
 						) : null}
-						{isVisible ? (
-							<g
-								className="house-group__info"
-								transform={`translate(${tooltipFrame.x} ${tooltipFrame.y})`}
-								pointerEvents="none"
-							>
-								<rect width={tooltipFrame.width} height={tooltipFrame.height} rx="10" ry="10" />
-								<text
-									x={tooltipFrame.width / 2}
-									y="22"
-									textAnchor="middle"
-								>
-									{stop.shortLabel}
-								</text>
-							</g>
-						) : null}
-						{isVisible && showKeyboardHint ? (
+					</g>
+				);
+			})}
+
+			<g
+				className={`trainer-svg ${characterVisible ? "" : "trainer-svg--hidden"}`}
+				transform={trainerTransform}
+				pointerEvents="none"
+				aria-hidden="true"
+			>
+				{/* Shadow */}
+				<ellipse className="trainer-svg__shadow" cx="16" cy="36" rx="10" ry="4" />
+				
+				{/* Backpack (Classic yellow bag) - Hidden when facing up, on sides when facing left/right */}
+				{facing === "down" && (
+					<rect fill="#ffd056" x="21" y="18" width="4" height="8" />
+				)}
+				{facing === "left" && (
+					<rect fill="#ffd056" x="18" y="17" width="5" height="9" />
+				)}
+				{facing === "right" && (
+					<rect fill="#ffd056" x="9" y="17" width="5" height="9" />
+				)}
+				{facing === "up" && (
+					<rect fill="#ffd056" x="10" y="17" width="12" height="6" />
+				)}
+				
+				{/* Legs/Pants */}
+				<rect fill="#303030" x="11" y="28" width="4" height="6" />
+				<rect fill="#303030" x="17" y="28" width="4" height="6" />
+				
+				{/* Body/Coat */}
+				<rect className="trainer-svg__coat" x="9" y="16" width="14" height="13" />
+				<rect fill="#ffffff" x="13" y="16" width="6" height="4" />
+				
+				{/* Face/Skin */}
+				<rect className="trainer-svg__face" x="11" y="8" width="10" height="9" />
+				
+				{/* Eyes - Only visible when facing down, left, or right */}
+				{facing === "down" && (
+					<>
+						<rect fill="#000000" x="13" y="11" width="1" height="2" />
+						<rect fill="#000000" x="18" y="11" width="1" height="2" />
+					</>
+				)}
+				{facing === "left" && (
+					<rect fill="#000000" x="12" y="11" width="1" height="2" />
+				)}
+				{facing === "right" && (
+					<rect fill="#000000" x="19" y="11" width="1" height="2" />
+				)}
+				
+				{/* Cap (Backwards cap) */}
+				<rect className="trainer-svg__cap" x="9" y="4" width="14" height="5" />
+				{/* Bill flips based on direction */}
+				{facing === "down" && <rect className="trainer-svg__cap" x="7" y="6" width="2" height="3" />}
+				{facing === "up" && <rect className="trainer-svg__cap" x="23" y="6" width="2" height="3" />}
+				{facing === "left" && <rect className="trainer-svg__cap" x="15" y="3" width="3" height="2" />}
+				{facing === "right" && <rect className="trainer-svg__cap" x="14" y="3" width="3" height="2" />}
+				
+				{/* Dynamic Outlines based on direction */}
+				<path
+					className="trainer-svg__outline"
+					fill="none"
+					d={`
+						M9 4h14v5h-14z 
+						${facing === "down" ? "M7 6h2v3h-2z" : ""}
+						${facing === "up" ? "M23 6h2v3h-2z" : ""}
+						${facing === "left" || facing === "right" ? "M14 3h5v2h-5z" : ""}
+						M9 16h14v13h-14z 
+						M11 8h10v9h-10z 
+						M11 28h4v6h-4z 
+						M17 28h4v6h-4z
+						${facing === "down" ? "M21 18h4v8h-4z" : ""}
+						${facing === "up" ? "M10 17h12v6h-12z" : ""}
+					`}
+				/>
+			</g>
+
+			{/* Tooltip Layer - Always on top */}
+			{stops.map((stop) => {
+				const draftStop = devDrafts.stops[stop.id];
+				const outline = draftStop?.outline?.length ? draftStop.outline : stop.outline;
+				const outlineBounds = getOutlineBounds(outline);
+				const isVisible = showStopTooltip && visibleStopId === stop.id;
+				const isActive = activeStopId === stop.id;
+				const showKeyboardHint = showStopTooltip && focusStopId === stop.id && !isActive;
+				const tooltipFrame = getTooltipFrame(outlineBounds, stop.shortLabel, showKeyboardHint);
+
+				if (!isVisible) return null;
+
+				return (
+					<g 
+						key={`tooltip-${stop.id}`} 
+						className="cursor-pointer"
+						onMouseEnter={() => onHoverChange(stop.id)}
+						onMouseLeave={() => onHoverChange(null)}
+						onClick={(event) => {
+							event.stopPropagation();
+							onEnterStop(stop.id);
+						}}
+					>
+						<g
+							className="house-group__info"
+							transform={`translate(${tooltipFrame.x} ${tooltipFrame.y})`}
+						>
+							<rect width={tooltipFrame.width} height={tooltipFrame.height} rx="0" ry="0" />
+							<text x={tooltipFrame.width / 2} y="22" textAnchor="middle">
+								{stop.shortLabel}
+							</text>
+						</g>
+						{showKeyboardHint && (
 							<text
 								className="house-group__hint-text"
 								x={tooltipFrame.x + tooltipFrame.width / 2}
@@ -393,24 +496,10 @@ export function TownMapOverlay({
 							>
 								Press F to enter
 							</text>
-						) : null}
+						)}
 					</g>
 				);
 			})}
-
-			<g
-				className={`trainer-svg ${characterVisible ? "" : "trainer-svg--hidden"}`}
-				transform={trainerTransform}
-				aria-hidden="true"
-			>
-				<ellipse className="trainer-svg__shadow" cx="16" cy="35" rx="10" ry="4" />
-				<rect className="trainer-svg__coat" x="9" y="17" width="14" height="12" rx="2" />
-				<rect className="trainer-svg__face" x="10" y="9" width="12" height="10" rx="2" />
-				<rect className="trainer-svg__cap" x="8" y="3" width="16" height="8" rx="2" />
-				<rect className="trainer-svg__outline" x="8" y="3" width="16" height="8" rx="2" />
-				<rect className="trainer-svg__outline" x="10" y="9" width="12" height="10" rx="2" />
-				<rect className="trainer-svg__outline" x="9" y="17" width="14" height="12" rx="2" />
-			</g>
 		</svg>
 	);
 }

@@ -20,40 +20,47 @@ export function PortfolioStopPanel({
 
 	if (detailMode === "about") {
 		return (
-			<div className="window-room window-room--about">
-				<section className="window-hero window-hero--profile">
-					<div className="window-kicker-row">
+			<div className="flex flex-col gap-6">
+				<section className="pokedex-box flex flex-col gap-6 p-8">
+					<div className="flex items-center justify-between gap-4">
 						<p className="pixel-eyebrow">Profile Snapshot</p>
-						<span className="window-status">{content.profile.title}</span>
+						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+							{content.profile.title}
+						</span>
 					</div>
-					<div className="window-hero__split">
-						<div className="window-hero__body">
-							<h3>{content.profile.name}</h3>
-							<p className="window-hero__lede">{content.profile.tagline}</p>
-							<p className="window-copy">{content.about.lead}</p>
+					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+						<div className="flex flex-col gap-4">
+							<h3 className="font-dot-gothic text-4xl leading-tight">{content.profile.name}</h3>
+							<p className="text-2xl leading-relaxed">{content.profile.tagline}</p>
+							<p className="m-0 text-xl leading-relaxed text-ink-soft">
+								{content.about.lead}
+								<span className="pixel-arrow">▼</span>
+							</p>
 						</div>
-						<div className="window-stat-stack">
+						<div className="flex flex-col gap-4 min-w-[280px]">
 							{content.profile.quickStats.map((stat) => (
-								<div className="window-chip" key={stat.label}>
-									<span>{stat.label}</span>
-									<strong>{stat.value}</strong>
+								<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={stat.label}>
+									<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{stat.label}</span>
+									<strong className="text-xl leading-tight">{stat.value}</strong>
 								</div>
 							))}
 						</div>
 					</div>
 				</section>
 
-				<div className="window-grid window-grid--about">
+				<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 					{content.about.sections.map((section) => (
-						<section className="window-panel window-panel--story" key={section.title}>
-							<div className="window-panel__headerline">
+						<section className="pixel-card flex flex-col gap-4 bg-panel-strong/50 p-6" key={section.title}>
+							<div className="flex items-center justify-between gap-4">
 								<p className="pixel-eyebrow">{section.title}</p>
-								<span className="window-panel__badge">Focus</span>
+								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
+									Focus
+								</span>
 							</div>
-							<p>{section.body}</p>
-							<ul className="window-list">
+							<p className="m-0 text-xl leading-relaxed">{section.body}</p>
+							<ul className="m-0 mt-2 flex flex-col gap-2 pl-5 list-disc">
 								{section.points.map((point) => (
-									<li key={point}>{point}</li>
+									<li key={point} className="text-lg leading-snug">{point}</li>
 								))}
 							</ul>
 						</section>
@@ -65,34 +72,37 @@ export function PortfolioStopPanel({
 
 	if (detailMode === "projects") {
 		return (
-			<div className="window-room">
-				<section className="window-hero window-hero--compact">
-					<div className="window-kicker-row">
+			<div className="flex flex-col gap-6">
+				<section className="pokedex-box flex flex-col gap-6 p-8">
+					<div className="flex items-center justify-between gap-4">
 						<p className="pixel-eyebrow">Flagship Work</p>
-						<span className="window-status">Curated Board</span>
+						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+							Curated Board
+						</span>
 					</div>
-					<div className="window-hero__split">
-						<div className="window-hero__body">
-							<h3>Projects</h3>
-							<p className="window-hero__lede">
+					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+						<div className="flex flex-col gap-4">
+							<h3 className="font-dot-gothic text-4xl leading-tight">Projects</h3>
+							<p className="text-2xl leading-relaxed">
 								Team projects, showcase pieces, and design writing selected for the
 								clearest read on process, tone, and presentation.
+								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="window-chip-row">
-							<div className="window-chip">
-								<span>Entries</span>
-								<strong>{content.projects.length}</strong>
+						<div className="flex flex-col gap-4 min-w-[280px]">
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Entries</span>
+								<strong className="text-xl leading-tight">{content.projects.length}</strong>
 							</div>
-							<div className="window-chip">
-								<span>Featured</span>
-								<strong>
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Featured</span>
+								<strong className="text-xl leading-tight">
 									{content.projects.filter((project) => project.featured).length}
 								</strong>
 							</div>
-							<div className="window-chip">
-								<span>Formats</span>
-								<strong>Builds, videos, writing</strong>
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Formats</span>
+								<strong className="text-xl leading-tight">Builds, videos, writing</strong>
 							</div>
 						</div>
 					</div>
@@ -108,7 +118,7 @@ export function PortfolioStopPanel({
 
 	if (detailMode === "games") {
 		return (
-			<div className="window-room window-room--games">
+			<div className="flex flex-col gap-6">
 				<GameShelf
 					title="Playable Shelf"
 					description="A keyboard-first arcade picker for the smaller builds, experiments, and quick play links."
@@ -120,49 +130,48 @@ export function PortfolioStopPanel({
 
 	if (detailMode === "contact") {
 		return (
-			<div className="window-room">
-				<section className="window-hero">
-					<div className="window-kicker-row">
+			<div className="flex flex-col gap-6">
+				<section className="pokedex-box flex flex-col gap-6 p-8">
+					<div className="flex items-center justify-between gap-4">
 						<p className="pixel-eyebrow">Next Move</p>
-						<span className="window-status">Open Channels</span>
+						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+							Open Channels
+						</span>
 					</div>
-					<div className="window-hero__split">
-						<div className="window-hero__body">
-							<h3>Contact</h3>
-							<p className="window-hero__lede">
+					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+						<div className="flex flex-col gap-4">
+							<h3 className="font-dot-gothic text-4xl leading-tight">Contact</h3>
+							<p className="text-2xl leading-relaxed">
 								Reach out through the route that fits best, from professional
 								follow-up to browsing more released work.
+								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="window-chip-row">
-							<div className="window-chip">
-								<span>Channels</span>
-								<strong>{content.contact.length}</strong>
+						<div className="flex flex-col gap-4 min-w-[280px]">
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Channels</span>
+								<strong className="text-xl leading-tight">{content.contact.length}</strong>
 							</div>
-							<div className="window-chip">
-								<span>Best First Step</span>
-								<strong>LinkedIn or portfolio</strong>
-							</div>
-							<div className="window-chip">
-								<span>Playables</span>
-								<strong>Itch collection linked</strong>
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Best First Step</span>
+								<strong className="text-xl leading-tight">LinkedIn or portfolio</strong>
 							</div>
 						</div>
 					</div>
 				</section>
 
-				<div className="contact-grid">
+				<div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
 					{content.contact.map((entry) => (
 						<a
-							className="contact-card"
+							className="pixel-card flex flex-col gap-2 bg-panel-strong p-6 transition-all hover:border-accent hover:bg-white"
 							href={entry.href}
 							key={entry.href}
 							target="_blank"
 							rel="noreferrer"
 						>
 							<p className="pixel-eyebrow">{entry.label}</p>
-							<strong>{entry.value}</strong>
-							<p>{entry.note}</p>
+							<strong className="text-2xl leading-tight">{entry.value}</strong>
+							<p className="m-0 text-lg leading-snug text-ink-soft">{entry.note}</p>
 						</a>
 					))}
 				</div>
@@ -172,83 +181,80 @@ export function PortfolioStopPanel({
 
 	if (detailMode === "coming-soon") {
 		return (
-			<div className="window-room">
-				<section className="window-hero">
-					<div className="window-kicker-row">
+			<div className="flex flex-col gap-6">
+				<section className="pokedex-box flex flex-col gap-6 p-8">
+					<div className="flex items-center justify-between gap-4">
 						<p className="pixel-eyebrow">Reserved Build Site</p>
-						<span className="window-status">Slot {stop.order}</span>
+						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+							Slot {stop.order}
+						</span>
 					</div>
-					<div className="window-hero__split">
-						<div className="window-hero__body">
-							<h3>{stop.title}</h3>
-							<p className="window-hero__lede">
+					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+						<div className="flex flex-col gap-4">
+							<h3 className="font-dot-gothic text-4xl leading-tight">{stop.title}</h3>
+							<p className="text-2xl leading-relaxed">
 								This route is still empty on purpose. It is being held for the next
 								portfolio drop so new work arrives with its own front door instead
 								of getting buried inside an older room.
+								<span className="pixel-arrow">▼</span>
 							</p>
 						</div>
-						<div className="window-chip-row">
-							<div className="window-chip">
-								<span>Status</span>
-								<strong>Reserved</strong>
+						<div className="flex flex-col gap-4 min-w-[280px]">
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Status</span>
+								<strong className="text-xl leading-tight">Reserved</strong>
 							</div>
-							<div className="window-chip">
-								<span>Priority</span>
-								<strong>Next notable addition</strong>
-							</div>
-							<div className="window-chip">
-								<span>Best Fit</span>
-								<strong>Something that needs its own room</strong>
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Priority</span>
+								<strong className="text-xl leading-tight">Next notable addition</strong>
 							</div>
 						</div>
 					</div>
 				</section>
 
-				<div className="window-grid">
-					<section className="window-panel">
-						<div className="window-panel__headerline">
+				<div className="grid grid-cols-1 gap-6">
+					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-8">
+						<div className="flex items-center justify-between gap-4">
 							<p className="pixel-eyebrow">Possible Directions</p>
-							<span className="window-panel__badge">Three Lanes</span>
+							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
+								Three Lanes
+							</span>
 						</div>
 
-						<div className="future-lane-grid">
-							<article className="future-lane-card">
-								<p className="pixel-eyebrow">01</p>
-								<strong>Fresh Case Study</strong>
-								<p>A full project room with stronger process notes, links, and final presentation.</p>
-							</article>
-							<article className="future-lane-card">
-								<p className="pixel-eyebrow">02</p>
-								<strong>Playable Prototype</strong>
-								<p>A smaller release that deserves its own shelf, playable link, and supporting context.</p>
-							</article>
-							<article className="future-lane-card">
-								<p className="pixel-eyebrow">03</p>
-								<strong>Design Writing</strong>
-								<p>A critical piece that expands the portfolio through analysis, theory, and reflection.</p>
-							</article>
+						<div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+							{[
+								{ id: "01", title: "Fresh Case Study", body: "A full project room with stronger process notes, links, and final presentation." },
+								{ id: "02", title: "Playable Prototype", body: "A smaller release that deserves its own shelf, playable link, and supporting context." },
+								{ id: "03", title: "Design Writing", body: "A critical piece that expands the portfolio through analysis, theory, and reflection." }
+							].map((lane) => (
+								<article className="pixel-card flex flex-col gap-2 bg-white/60 p-5" key={lane.id}>
+									<p className="pixel-eyebrow text-xs!">{lane.id}</p>
+									<strong className="text-xl leading-tight">{lane.title}</strong>
+									<p className="m-0 text-lg leading-snug text-ink-soft">{lane.body}</p>
+								</article>
+							))}
 						</div>
 					</section>
 
-					<section className="window-panel">
-						<div className="window-panel__headerline">
+					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-8">
+						<div className="flex items-center justify-between gap-4">
 							<p className="pixel-eyebrow">Current Signal</p>
-							<span className="window-panel__badge">At A Glance</span>
+							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
+								At A Glance
+							</span>
 						</div>
-						<p>{stop.preview}</p>
-						<div className="future-principles">
-							<div className="future-principles__card">
-								<strong>Worth the detour</strong>
-								<p>The next room should add a new angle to the portfolio, not repeat an existing stop.</p>
-							</div>
-							<div className="future-principles__card">
-								<strong>Readable fast</strong>
-								<p>Even playful work should still make its point in one quick pass.</p>
-							</div>
-							<div className="future-principles__card">
-								<strong>Linked out cleanly</strong>
-								<p>Every future stop should end with a clear action: play, watch, read, or reach out.</p>
-							</div>
+						<p className="m-0 text-xl leading-relaxed">{stop.preview}</p>
+						<div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							{[
+								{ title: "Worth the detour", body: "The next room should add a new angle to the portfolio, not repeat an existing stop." },
+								{ title: "Readable fast", body: "Even playful work should still make its point in one quick pass." },
+								{ title: "Linked out cleanly", body: "Every future stop should end with a clear action: play, watch, read, or reach out." }
+							].map((principle) => (
+								<div className="pixel-card flex flex-col gap-2 bg-white/40 p-5" key={principle.title}>
+									<strong className="text-lg leading-tight">{principle.title}</strong>
+									<p className="m-0 text-base leading-snug text-ink-soft">{principle.body}</p>
+								</div>
+							))}
 						</div>
 					</section>
 				</div>
@@ -257,46 +263,48 @@ export function PortfolioStopPanel({
 	}
 
 	return (
-		<div className="window-room">
-			<section className="window-hero">
-				<div className="window-kicker-row">
+		<div className="flex flex-col gap-6">
+			<section className="pokedex-box flex flex-col gap-6 p-8">
+				<div className="flex items-center justify-between gap-4">
 					<p className="pixel-eyebrow">Studio Preview</p>
-					<span className="window-status">Curator View</span>
+					<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+						Curator View
+					</span>
 				</div>
-				<div className="window-hero__split">
-					<div className="window-hero__body">
-						<h3>Control Room</h3>
-						<p className="window-hero__lede">{content.dashboard.intro}</p>
+				<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
+					<div className="flex flex-col gap-4">
+						<h3 className="font-dot-gothic text-4xl leading-tight">Control Room</h3>
+						<p className="text-2xl leading-relaxed">{content.dashboard.intro}</p>
 					</div>
-					<div className="window-chip-row">
+					<div className="flex flex-col gap-4 min-w-[280px]">
 						{content.dashboard.toolStatus.map((status) => (
-							<div className="window-chip" key={status.label}>
-								<span>{status.label}</span>
-								<strong>{status.value}</strong>
+							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4" key={status.label}>
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">{status.label}</span>
+								<strong className="text-xl leading-tight">{status.value}</strong>
 							</div>
 						))}
 					</div>
 				</div>
 			</section>
 
-			<div className="window-grid">
-				<section className="window-panel">
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+				<section className="pixel-card flex flex-col gap-4 bg-panel-strong p-6">
 					<p className="pixel-eyebrow">Desk Notes</p>
-					<ul className="window-list">
+					<ul className="m-0 flex flex-col gap-2 pl-5 list-disc">
 						{content.dashboard.notes.map((note) => (
-							<li key={note}>{note}</li>
+							<li key={note} className="text-lg leading-snug">{note}</li>
 						))}
 					</ul>
 				</section>
 
-				<section className="window-panel">
+				<section className="pixel-card flex flex-col gap-4 bg-panel-strong p-6">
 					<p className="pixel-eyebrow">Priority Queue</p>
-					<ul className="window-list">
+					<ul className="m-0 flex flex-col gap-2 pl-5 list-disc">
 						{content.dashboard.publishQueue.map((item) => (
-							<li key={item}>{item}</li>
+							<li key={item} className="text-lg leading-snug">{item}</li>
 						))}
 					</ul>
-					<Link className="route-link" href="/admin">
+					<Link className="pixel-button mt-4" href="/admin">
 						Open Admin Center
 					</Link>
 				</section>
