@@ -24,13 +24,42 @@ import {
 	type DevToolMode,
 	type DevPolygonDraft,
 } from "./map-dev-tool";
-import { PortfolioStopPanel } from "./portfolio-stop-panel";
 import {
-	OVERWORLD_AMBIENT_SPRITES,
-	TownMapOverlay,
-	type AmbientSpriteActor,
-	type FacingDirection,
-} from "./town-map-overlay";
+	type AmbientActorState,
+	createAmbientActors,
+	getAmbientEmoteDurationMs,
+	getAmbientFeetPosition,
+	getAmbientIdleDurationMs,
+	getAmbientPositionFromFeet,
+	getAmbientPostEmoteIdleMs,
+	getAmbientRoamRadius,
+	getAmbientSpeedRange,
+	getFacingFromVector,
+	isConversationalAmbientActor,
+	isStaticAmbientActor,
+	OVERWORLD_AMBIENT_SPRITE_IDS,
+} from "./town-ambient";
+import { PortfolioStopPanel } from "./portfolio-stop-panel";
+import { OVERWORLD_AMBIENT_SPRITES, TownMapOverlay } from "./town-map-overlay";
+import {
+	ACTIVE_BACKGROUND_STORAGE_KEY,
+	DEV_DRAFT_STORAGE_KEY,
+	EMPTY_STOP_POSITION,
+	getCameraFrame,
+	getCharacterTravelSpeed,
+	getDefaultLayerVisibility,
+	getDistanceToSegment,
+	getDraftStorageKey,
+	getFacingFromMovementKey,
+	getOutlineBounds,
+	isLegacyBackgroundEnabled,
+	isMovementKey,
+	isTownMapBackgroundId,
+	isUnsetPosition,
+	LEGACY_BACKGROUND_ID,
+	SHOW_LEGACY_BACKGROUND_STORAGE_KEY,
+	mergeTravelPaths,
+} from "./town-portfolio-helpers";
 import {
 	clamp,
 	type DragTarget,
@@ -40,327 +69,6 @@ import {
 	isPolygonMode,
 } from "./town-map-utils";
 
-function getOutlineBounds(points: Position[]) {
-	const xs = points.map((point) => point.x);
-	const ys = points.map((point) => point.y);
-	return {
-		x: Math.min(...xs),
-		y: Math.min(...ys),
-		width: Math.max(...xs) - Math.min(...xs),
-		height: Math.max(...ys) - Math.min(...ys),
-	};
-}
-
-function getDefaultLayerVisibility(mode: DevToolMode): DevLayerVisibility {
-	if (mode === "all") {
-		return {
-			walkable: false,
-			blocked: false,
-			sections: false,
-			stopOutlines: true,
-			stopAnchors: false,
-			pointHandles: false,
-		};
-	}
-
-	if (mode === "walkable") {
-		return {
-			walkable: true,
-			blocked: false,
-			sections: false,
-			stopOutlines: false,
-			stopAnchors: false,
-			pointHandles: true,
-		};
-	}
-
-	if (mode === "blocked") {
-		return {
-			walkable: false,
-			blocked: true,
-			sections: false,
-			stopOutlines: false,
-			stopAnchors: false,
-			pointHandles: true,
-		};
-	}
-
-	if (mode === "section") {
-		return {
-			walkable: false,
-			blocked: false,
-			sections: true,
-			stopOutlines: false,
-			stopAnchors: false,
-			pointHandles: true,
-		};
-	}
-
-	if (mode === "stop-outline") {
-		return {
-			walkable: false,
-			blocked: false,
-			sections: false,
-			stopOutlines: true,
-			stopAnchors: false,
-			pointHandles: true,
-		};
-	}
-
-	return {
-		walkable: false,
-		blocked: false,
-		sections: false,
-		stopOutlines: true,
-		stopAnchors: true,
-		pointHandles: false,
-	};
-}
-
-const ACTIVE_BACKGROUND_STORAGE_KEY = "pokemon-town-active-background";
-const DEV_DRAFT_STORAGE_KEY = "pokemon-town-dev-drafts";
-const SHOW_LEGACY_BACKGROUND_STORAGE_KEY = "pokemon-town-show-legacy-background";
-const EMPTY_STOP_POSITION: Position = { x: -9999, y: -9999 };
-const LEGACY_BACKGROUND_ID: TownMapBackgroundId = "background";
-
-function getDraftStorageKey(backgroundId: TownMapBackgroundId) {
-	return `${DEV_DRAFT_STORAGE_KEY}:${backgroundId}`;
-}
-
-function isTownMapBackgroundId(value: string | null): value is TownMapBackgroundId {
-	return townMapVariants.some((background) => background.id === value);
-}
-
-function isLegacyBackgroundEnabled(value: string | null) {
-	return value === "true";
-}
-
-function isUnsetPosition(position: Position) {
-	return position.x < 0 || position.y < 0;
-}
-
-function getCameraFrame({
-	mapHeight,
-	mapWidth,
-	position,
-	viewportHeight,
-	viewportWidth,
-}: {
-	mapHeight: number;
-	mapWidth: number;
-	position: Position;
-	viewportHeight: number;
-	viewportWidth: number;
-}) {
-	const scale = Math.max(
-		viewportWidth / mapWidth,
-		viewportHeight / mapHeight,
-	);
-	const sceneWidth = mapWidth * scale;
-	const sceneHeight = mapHeight * scale;
-	const x = clamp(
-		viewportWidth / 2 - position.x * scale,
-		viewportWidth - sceneWidth,
-		0,
-	);
-	const y = clamp(
-		viewportHeight / 2 - position.y * scale,
-		viewportHeight - sceneHeight,
-		0,
-	);
-
-	return { scale, x, y };
-}
-
-function getDistanceToSegment(point: Position, start: Position, end: Position) {
-	const dx = end.x - start.x;
-	const dy = end.y - start.y;
-	const lengthSquared = dx * dx + dy * dy;
-
-	if (lengthSquared === 0) {
-		return Math.hypot(point.x - start.x, point.y - start.y);
-	}
-
-	const projection = clamp(
-		((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
-		0,
-		1,
-	);
-	const projectedPoint = {
-		x: start.x + dx * projection,
-		y: start.y + dy * projection,
-	};
-
-	return Math.hypot(point.x - projectedPoint.x, point.y - projectedPoint.y);
-}
-
-function mergeTravelPaths(...segments: Position[][]) {
-	const merged: Position[] = [];
-
-	for (const segment of segments) {
-		if (segment.length === 0) {
-			continue;
-		}
-
-		if (merged.length === 0) {
-			merged.push(...segment);
-			continue;
-		}
-
-		const lastPoint = merged[merged.length - 1];
-		const [firstPoint, ...restPoints] = segment;
-		if (Math.hypot(firstPoint.x - lastPoint.x, firstPoint.y - lastPoint.y) > 0.01) {
-			merged.push(firstPoint);
-		}
-		merged.push(...restPoints);
-	}
-
-	return merged;
-}
-
-type AmbientActorState = AmbientSpriteActor & {
-	conversationCooldownRemainingMs: number;
-	conversationPartnerId: string | null;
-	conversationRemainingMs: number;
-	emoteAnimationMs: number;
-	emoteRemainingMs: number;
-	path: Position[];
-	playerInteractionCooldownRemainingMs: number;
-	playerInteractionRemainingMs: number;
-};
-
-const STATIC_AMBIENT_ACTOR_IDS = new Set<string>();
-
-function getFacingFromRow(row = 0): FacingDirection {
-	if (row === 1) {
-		return "left";
-	}
-
-	if (row === 2) {
-		return "up";
-	}
-
-	if (row === 3) {
-		return "right";
-	}
-
-	return "down";
-}
-
-function getFacingFromVector(dx: number, dy: number): FacingDirection {
-	if (Math.abs(dx) > Math.abs(dy)) {
-		return dx >= 0 ? "right" : "left";
-	}
-
-	return dy >= 0 ? "down" : "up";
-}
-
-function isStaticAmbientActor(actorId: string) {
-	return STATIC_AMBIENT_ACTOR_IDS.has(actorId);
-}
-
-function isConversationalAmbientActor(actorId: string) {
-	return !isStaticAmbientActor(actorId) && !actorId.startsWith("creature");
-}
-
-function getAmbientSpeedRange(actorId: string) {
-	if (actorId.startsWith("creature")) {
-		return { min: 24, max: 40 };
-	}
-
-	return { min: 32, max: 56 };
-}
-
-function getAmbientRoamRadius(actorId: string) {
-	if (actorId.startsWith("creature")) {
-		return 58;
-	}
-
-	if (actorId.startsWith("snpc")) {
-		return 72;
-	}
-
-	return 88;
-}
-
-function getAmbientIdleDurationMs(actorId: string) {
-	if (actorId.startsWith("creature")) {
-		return 400 + Math.random() * 1000;
-	}
-
-	return 700 + Math.random() * 1800;
-}
-
-function getAmbientEmoteDurationMs(actorId: string) {
-	if (actorId.startsWith("creature")) {
-		return 3800 + Math.random() * 2400;
-	}
-
-	return 4200 + Math.random() * 3200;
-}
-
-function getAmbientPostEmoteIdleMs(actorId: string) {
-	if (actorId.startsWith("creature")) {
-		return 320 + Math.random() * 380;
-	}
-
-	return 480 + Math.random() * 520;
-}
-
-function getCharacterTravelSpeed(prefersReducedMotion: boolean) {
-	return prefersReducedMotion ? 260 : 205;
-}
-
-function getAmbientFeetPosition(actor: Pick<AmbientActorState, "position" | "renderHeight" | "renderWidth">): Position {
-	return {
-		x: actor.position.x + actor.renderWidth / 2,
-		y: actor.position.y + actor.renderHeight - 4,
-	};
-}
-
-function getAmbientPositionFromFeet(
-	feet: Position,
-	actor: Pick<AmbientActorState, "renderHeight" | "renderWidth">,
-): Position {
-	return {
-		x: feet.x - actor.renderWidth / 2,
-		y: feet.y - actor.renderHeight + 4,
-	};
-}
-
-function createAmbientActors(backgroundId: TownMapBackgroundId): AmbientActorState[] {
-	if (backgroundId !== defaultTownMapBackgroundId) {
-		return [];
-	}
-
-	return OVERWORLD_AMBIENT_SPRITES.map((sprite) => {
-		const speedRange = getAmbientSpeedRange(sprite.id);
-
-		return {
-			...sprite,
-			conversationCooldownRemainingMs: 0,
-			conversationPartnerId: null,
-			conversationRemainingMs: 0,
-			emoteAnimationMs: 0,
-			emoteRemainingMs: sprite.defaultEmoteVisible ? 3200 : 0,
-			emoteVisible: Boolean(sprite.defaultEmoteVisible),
-			facing: getFacingFromRow(sprite.row),
-			idleRemainingMs: isStaticAmbientActor(sprite.id)
-				? 0
-				: getAmbientIdleDurationMs(sprite.id),
-			moving: false,
-			path: [],
-			playerInteractionCooldownRemainingMs: 0,
-			playerInteractionRemainingMs: 0,
-			position: { x: sprite.x, y: sprite.y },
-			spawn: { x: sprite.x, y: sprite.y },
-			speed:
-				speedRange.min + Math.random() * (speedRange.max - speedRange.min),
-			target: null,
-		};
-	});
-}
-
 export function TownPortfolio({
 	content,
 	stops,
@@ -369,7 +77,6 @@ export function TownPortfolio({
 	stops: TownStop[];
 }) {
 	const ambientSpriteSeed = OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id).join("|");
-	const ambientSpriteIds = new Set(OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id));
 	const editorEnabled = true;
 	const defaultMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
 	const [activeBackgroundId, setActiveBackgroundId] =
@@ -449,6 +156,36 @@ export function TownPortfolio({
 		pressedKeysRef.current.clear();
 		setTravelingTo(null);
 	}, [clearTimer, stopMovementLoop]);
+	const syncCharacterPosition = useCallback((nextPosition: Position) => {
+		setCharacterPosition(nextPosition);
+		positionRef.current = nextPosition;
+	}, []);
+	const resetTownState = useCallback(({
+		backgroundId,
+		draftsHydrated,
+		position,
+	}: {
+		backgroundId: TownMapBackgroundId;
+		draftsHydrated: boolean;
+		position: Position;
+	}) => {
+		cancelCurrentMovement();
+		setDragTarget(null);
+		setHoveredStopId(null);
+		setActiveStopId(null);
+		setLastStopId(null);
+		setExitPassThroughStopId(null);
+		setCharacterVisible(true);
+		setProximitySuppressed(false);
+		syncCharacterPosition(position);
+		setDevDrafts(createSeedDevDrafts(backgroundId));
+		setDraftsHydrated(draftsHydrated);
+	}, [cancelCurrentMovement, syncCharacterPosition]);
+	const prepareForPlayerTravel = useCallback(() => {
+		cancelCurrentMovement();
+		setGuideOpen(false);
+		setCharacterVisible(true);
+	}, [cancelCurrentMovement]);
 	const availableBackgrounds = useMemo(
 		() =>
 			showLegacyBackground
@@ -526,29 +263,17 @@ export function TownPortfolio({
 
 		if (!showLegacyBackground && activeBackgroundId === LEGACY_BACKGROUND_ID) {
 			const frame = window.requestAnimationFrame(() => {
-				const nextMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
-
-				clearTimer();
-				stopMovementLoop();
-				pressedKeysRef.current.clear();
-				setDragTarget(null);
-				setHoveredStopId(null);
-				setActiveStopId(null);
-				setTravelingTo(null);
-				setLastStopId(null);
-				setExitPassThroughStopId(null);
-				setCharacterVisible(true);
-				setProximitySuppressed(false);
-				setCharacterPosition(nextMapVariant.startPosition);
-				positionRef.current = nextMapVariant.startPosition;
-				setDevDrafts(createSeedDevDrafts(defaultTownMapBackgroundId));
-				setDraftsHydrated(false);
+				resetTownState({
+					backgroundId: defaultTownMapBackgroundId,
+					draftsHydrated: false,
+					position: getTownMapVariant(defaultTownMapBackgroundId).startPosition,
+				});
 				setActiveBackgroundId(defaultTownMapBackgroundId);
 			});
 
 			return () => window.cancelAnimationFrame(frame);
 		}
-	}, [activeBackgroundId, clearTimer, showLegacyBackground, stopMovementLoop]);
+	}, [activeBackgroundId, resetTownState, showLegacyBackground]);
 
 	useEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
@@ -561,21 +286,11 @@ export function TownPortfolio({
 			const rawDrafts =
 				window.localStorage.getItem(primaryStorageKey) ?? legacyDrafts;
 
-			clearTimer();
-			stopMovementLoop();
-			pressedKeysRef.current.clear();
-			setDragTarget(null);
-			setHoveredStopId(null);
-			setActiveStopId(null);
-			setTravelingTo(null);
-			setLastStopId(null);
-			setExitPassThroughStopId(null);
-			setCharacterVisible(true);
-			setProximitySuppressed(false);
-			setCharacterPosition(nextStartPosition);
-			positionRef.current = nextStartPosition;
-			setDevDrafts(createSeedDevDrafts(activeBackgroundId));
-			setDraftsHydrated(false);
+			resetTownState({
+				backgroundId: activeBackgroundId,
+				draftsHydrated: false,
+				position: nextStartPosition,
+			});
 
 			if (!rawDrafts) {
 				window.localStorage.setItem(ACTIVE_BACKGROUND_STORAGE_KEY, activeBackgroundId);
@@ -604,7 +319,7 @@ export function TownPortfolio({
 		});
 
 		return () => window.cancelAnimationFrame(frame);
-	}, [activeBackgroundId, activeMapVariant.startPosition, clearTimer, stopMovementLoop]);
+	}, [activeBackgroundId, activeMapVariant.startPosition, resetTownState]);
 
 	useEffect(() => {
 		if (!draftsHydrated) {
@@ -702,8 +417,7 @@ export function TownPortfolio({
 
 		if (instantTravel) {
 			const finalPoint = points[points.length - 1];
-			setCharacterPosition(finalPoint);
-			positionRef.current = finalPoint;
+			syncCharacterPosition(finalPoint);
 			setPathMoving(false);
 			onDone(true);
 			return;
@@ -784,8 +498,7 @@ export function TownPortfolio({
 			}
 
 			if (moved) {
-				setCharacterPosition(currentPoint);
-				positionRef.current = currentPoint;
+				syncCharacterPosition(currentPoint);
 				setCharacterVisible(true);
 				setLastStopId(null);
 				setProximitySuppressed(false);
@@ -849,48 +562,25 @@ export function TownPortfolio({
 			return;
 		}
 
-		const nextMapVariant = getTownMapVariant(nextBackgroundId);
-
-		clearTimer();
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
-		setDragTarget(null);
-		setHoveredStopId(null);
-		setActiveStopId(null);
-		setTravelingTo(null);
-		setLastStopId(null);
-		setExitPassThroughStopId(null);
-		setCharacterVisible(true);
-		setProximitySuppressed(false);
-		setCharacterPosition(nextMapVariant.startPosition);
-		positionRef.current = nextMapVariant.startPosition;
-		setDevDrafts(createSeedDevDrafts(nextBackgroundId));
-		setDraftsHydrated(false);
+		resetTownState({
+			backgroundId: nextBackgroundId,
+			draftsHydrated: false,
+			position: getTownMapVariant(nextBackgroundId).startPosition,
+		});
 		setActiveBackgroundId(nextBackgroundId);
 	}
 
 	function resetActiveBackgroundDrafts() {
-		const nextMapVariant = getTownMapVariant(activeBackgroundId);
-
 		window.localStorage.removeItem(getDraftStorageKey(activeBackgroundId));
 		if (activeBackgroundId === defaultTownMapBackgroundId) {
 			window.localStorage.removeItem(DEV_DRAFT_STORAGE_KEY);
 		}
 
-		clearTimer();
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
-		setDragTarget(null);
-		setHoveredStopId(null);
-		setActiveStopId(null);
-		setTravelingTo(null);
-		setLastStopId(null);
-		setCharacterVisible(true);
-		setProximitySuppressed(false);
-		setCharacterPosition(nextMapVariant.startPosition);
-		positionRef.current = nextMapVariant.startPosition;
-		setDevDrafts(createSeedDevDrafts(activeBackgroundId));
-		setDraftsHydrated(true);
+		resetTownState({
+			backgroundId: activeBackgroundId,
+			draftsHydrated: true,
+			position: getTownMapVariant(activeBackgroundId).startPosition,
+		});
 	}
 
 	function getNextPolygonZoneId(kind: DevPolygonKind) {
@@ -1572,6 +1262,39 @@ export function TownPortfolio({
 		activeMapVariant.width,
 		isPlayerNavigablePoint,
 	]);
+	const buildStopEntryPath = useCallback((stop: TownStop) => {
+		if (isUnsetPosition(stop.exit)) {
+			return findPath(
+				positionRef.current,
+				stop.door,
+				stop.id,
+				isPlayerNavigablePoint,
+			);
+		}
+
+		return mergeTravelPaths(
+			findPath(
+				positionRef.current,
+				stop.exit,
+				null,
+				isPlayerNavigablePoint,
+			),
+			findPath(
+				stop.exit,
+				stop.door,
+				stop.id,
+				isPlayerNavigablePoint,
+			),
+		);
+	}, [findPath, isPlayerNavigablePoint]);
+	const buildStopExitPath = useCallback((stop: TownStop) => {
+		return findPath(
+			stop.door,
+			stop.exit,
+			stop.id,
+			isPlayerNavigablePoint,
+		);
+	}, [findPath, isPlayerNavigablePoint]);
 
 	const findNearestAmbientFeet = useCallback((
 		actor: AmbientActorState,
@@ -1643,7 +1366,7 @@ export function TownPortfolio({
 
 		setAmbientActors((currentActors) => {
 			const nextActors = currentActors
-				.filter((actor) => ambientSpriteIds.has(actor.id))
+				.filter((actor) => OVERWORLD_AMBIENT_SPRITE_IDS.has(actor.id))
 				.map((actor) => {
 				const nextActor: AmbientActorState = {
 					...actor,
@@ -2145,37 +1868,14 @@ export function TownPortfolio({
 			return;
 		}
 
-		cancelCurrentMovement();
-		setGuideOpen(false);
+		prepareForPlayerTravel();
 		const stop = getStop(effectiveStops, stopId);
 		if (stop.outline.length < 3 || isUnsetPosition(stop.door)) {
 			return;
 		}
 		setExitPassThroughStopId(null);
 		setTravelingTo(stopId);
-		setCharacterVisible(true);
-
-		const path = isUnsetPosition(stop.exit)
-			? findPath(
-					positionRef.current,
-					stop.door,
-					stopId,
-					isPlayerNavigablePoint,
-				)
-			: mergeTravelPaths(
-					findPath(
-						positionRef.current,
-						stop.exit,
-						null,
-						isPlayerNavigablePoint,
-					),
-					findPath(
-						stop.exit,
-						stop.door,
-						stopId,
-						isPlayerNavigablePoint,
-					),
-				);
+		const path = buildStopEntryPath(stop);
 
 		runTravel(path, (completed) => {
 			setTravelingTo(null);
@@ -2204,12 +1904,7 @@ export function TownPortfolio({
 		setTravelingTo(stop.id);
 		setCharacterVisible(true);
 
-		const path = findPath(
-			stop.door,
-			stop.exit,
-			stop.id,
-			isPlayerNavigablePoint,
-		);
+		const path = buildStopExitPath(stop);
 
 		runTravel(path, (completed) => {
 			setTravelingTo(null);
@@ -2249,9 +1944,7 @@ export function TownPortfolio({
 			return;
 		}
 
-		cancelCurrentMovement();
-		setGuideOpen(false);
-		setCharacterVisible(true);
+		prepareForPlayerTravel();
 
 		const path = findPath(
 			positionRef.current,
@@ -2449,15 +2142,7 @@ export function TownPortfolio({
 		}
 
 		const key = event.key.toLowerCase();
-		const isMovementKey =
-			key === "w" ||
-			key === "arrowup" ||
-			key === "s" ||
-			key === "arrowdown" ||
-			key === "a" ||
-			key === "arrowleft" ||
-			key === "d" ||
-			key === "arrowright";
+		const movementKeyPressed = isMovementKey(key);
 
 		const activeElement = document.activeElement as HTMLElement | null;
 		const isTypingTarget =
@@ -2476,7 +2161,7 @@ export function TownPortfolio({
 			return;
 		}
 
-		if (isMovementKey && (travelingTo || pathMoving)) {
+		if (movementKeyPressed && (travelingTo || pathMoving)) {
 			cancelCurrentMovement();
 		}
 
@@ -2494,15 +2179,7 @@ export function TownPortfolio({
 			case "d":
 			case "arrowright":
 				event.preventDefault();
-				setFacing(
-					key === "a" || key === "arrowleft"
-						? "left"
-						: key === "d" || key === "arrowright"
-							? "right"
-							: key === "w" || key === "arrowup"
-								? "up"
-								: "down",
-				);
+				setFacing(getFacingFromMovementKey(key));
 				pressedKeysRef.current.add(key);
 				startMovementLoop();
 				return;
