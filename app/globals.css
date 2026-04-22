@@ -153,6 +153,67 @@
 	vertical-align: middle;
 }
 
+.asset-room-hero {
+	background:
+		radial-gradient(circle at top right, rgba(255, 208, 86, 0.45), transparent 24%),
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 246, 210, 0.88));
+}
+
+.asset-preview {
+	position: relative;
+	overflow: hidden;
+	border: 4px solid var(--line);
+}
+
+.asset-preview--light {
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 251, 252, 0.92)),
+		repeating-linear-gradient(
+			90deg,
+			rgba(16, 21, 24, 0.04) 0,
+			rgba(16, 21, 24, 0.04) 2px,
+			transparent 2px,
+			transparent 16px
+		);
+}
+
+.asset-preview--dark {
+	background:
+		radial-gradient(circle at top, rgba(255, 208, 86, 0.16), transparent 24%),
+		linear-gradient(180deg, #152028 0%, #0f1518 100%);
+}
+
+.asset-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 2px solid rgba(255, 255, 255, 0.24);
+	background: rgba(16, 21, 24, 0.72);
+	padding: 0.2rem 0.5rem;
+	font-family: var(--font-dot-gothic), monospace;
+	font-size: 0.65rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: white;
+}
+
+.asset-reference-columns {
+	columns: 1;
+	column-gap: 1rem;
+}
+
+@media (min-width: 768px) {
+	.asset-reference-columns {
+		columns: 2;
+	}
+}
+
+@media (min-width: 1280px) {
+	.asset-reference-columns {
+		columns: 3;
+	}
+}
+
 .map-image,
 .map-overlay {
 	position: absolute;
@@ -178,29 +239,31 @@
 	pointer-events: auto;
 }
 
-.trainer-svg {
+.trainer-sprite {
 	transition: opacity 140ms ease;
-	image-rendering: auto;
+	image-rendering: pixelated;
 }
 
-.trainer-svg--hidden {
+.trainer-sprite--hidden {
 	opacity: 0;
 }
 
-.trainer-svg__shadow {
+.trainer-sprite__shadow {
 	fill: rgba(12, 16, 18, 0.28);
 }
 
-.trainer-svg__coat {
-	fill: #2756c2;
+.trainer-sprite__sheet {
+	overflow: visible;
+	image-rendering: pixelated;
 }
 
-.trainer-svg__face {
-	fill: #f2d7b2;
+.ambient-sprite__shadow {
+	fill: rgba(12, 16, 18, 0.24);
 }
 
-.trainer-svg__cap {
-	fill: #cf372d;
+.ambient-sprite__sheet,
+.ambient-sprite__effect {
+	image-rendering: pixelated;
 }
 
 /* Scrollbar Customization */

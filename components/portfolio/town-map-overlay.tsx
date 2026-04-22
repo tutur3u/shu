@@ -1,6 +1,7 @@
 "use client";
 
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
+import { emoteAssets, mainCharacterAssets, npcAssets } from "@/lib/asset-catalog";
 import type { Position, StopId, TownStop } from "@/lib/portfolio-content";
 import type {
 	DevInteractionMode,
@@ -54,10 +55,477 @@ function isRenderablePoint(point: Position) {
 	return point.x >= 0 && point.y >= 0;
 }
 
+const TRAINER_SPRITE_PATH = "/assets/characters/main/move.png";
+const TRAINER_SPRITE_RENDER_SIZE = 32;
+const TRAINER_SPRITE_CLIP_ID = "town-trainer-sprite-clip";
+const SPARKLE_EFFECT_PATH = "/assets/effects/sparkle.png";
+const STATIC_AMBIENT_SPRITE_IDS = new Set([
+	"bench-sitter",
+	"parked-bike",
+	"fountain-wave",
+]);
+
+export type FacingDirection = "up" | "down" | "left" | "right";
+
+export type AmbientSpriteDefinition = {
+	id: string;
+	src: string;
+	x: number;
+	y: number;
+	columns: number;
+	rows: number;
+	renderWidth: number;
+	renderHeight: number;
+	row?: number;
+	column?: number;
+	animateAxis?: "column" | "row";
+	animationFrames?: number;
+	animationOffset?: number;
+	defaultEmoteVisible?: boolean;
+	shadow?: boolean;
+	emote?: {
+		src: string;
+		x: number;
+		y: number;
+		columns: number;
+		rows: number;
+		renderWidth: number;
+		renderHeight: number;
+		animateAxis?: "column" | "row";
+		animationFrames?: number;
+		animationOffset?: number;
+	};
+};
+
+export type AmbientSpriteActor = AmbientSpriteDefinition & {
+	emoteAnimationMs: number;
+	emoteVisible: boolean;
+	facing: FacingDirection;
+	idleRemainingMs: number;
+	moving: boolean;
+	position: Position;
+	spawn: Position;
+	speed: number;
+	target: Position | null;
+};
+
+export const OVERWORLD_AMBIENT_SPRITES: AmbientSpriteDefinition[] = [
+	{
+		id: "npc-1-north",
+		src: npcAssets[5].src,
+		x: 462,
+		y: 334,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 0,
+		animateAxis: "column",
+		animationFrames: 4,
+		shadow: true,
+		emote: {
+			src: emoteAssets[8].src,
+			x: 7,
+			y: -20,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+		},
+	},
+	{
+		id: "npc-2-north",
+		src: npcAssets[6].src,
+		x: 500,
+		y: 336,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 1,
+		animateAxis: "column",
+		animationFrames: 4,
+		animationOffset: 1,
+		shadow: true,
+		emote: {
+			src: emoteAssets[11].src,
+			x: 8,
+			y: -19,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+			animationOffset: 1,
+		},
+	},
+	{
+		id: "npc-3-center",
+		src: npcAssets[7].src,
+		x: 552,
+		y: 334,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 0,
+		shadow: true,
+		emote: {
+			src: emoteAssets[9].src,
+			x: 8,
+			y: -18,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+			animationOffset: 2,
+		},
+	},
+	{
+		id: "npc-4-right",
+		src: npcAssets[8].src,
+		x: 594,
+		y: 338,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 3,
+		shadow: true,
+		emote: {
+			src: emoteAssets[13].src,
+			x: 7,
+			y: -19,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+			animationOffset: 3,
+		},
+	},
+	{
+		id: "npc-5-fountain",
+		src: npcAssets[9].src,
+		x: 160,
+		y: 512,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 3,
+		animateAxis: "column",
+		animationFrames: 4,
+		animationOffset: 2,
+		shadow: true,
+		emote: {
+			src: emoteAssets[12].src,
+			x: 7,
+			y: -20,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+		},
+	},
+	{
+		id: "snpc-1-fountain",
+		src: npcAssets[10].src,
+		x: 280,
+		y: 502,
+		columns: 4,
+		rows: 4,
+		renderWidth: 32,
+		renderHeight: 32,
+		row: 1,
+		shadow: true,
+		emote: {
+			src: emoteAssets[1].src,
+			x: 8,
+			y: -20,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+			animationOffset: 4,
+		},
+	},
+	{
+		id: "snpc-2-house",
+		src: npcAssets[11].src,
+		x: 672,
+		y: 349,
+		columns: 3,
+		rows: 4,
+		renderWidth: 24,
+		renderHeight: 32,
+		row: 0,
+		animateAxis: "column",
+		animationFrames: 3,
+		animationOffset: 1,
+		shadow: true,
+		emote: {
+			src: emoteAssets[3].src,
+			x: 3,
+			y: -20,
+			columns: 1,
+			rows: 5,
+			renderWidth: 18,
+			renderHeight: 18,
+			animateAxis: "row",
+			animationFrames: 5,
+			animationOffset: 2,
+		},
+	},
+	{
+		id: "creature-1-construction",
+		src: npcAssets[0].src,
+		x: 760,
+		y: 620,
+		columns: 2,
+		rows: 4,
+		renderWidth: 26,
+		renderHeight: 32,
+		row: 1,
+		animateAxis: "column",
+		animationFrames: 2,
+		shadow: true,
+	},
+	{
+		id: "creature-2-fountain",
+		src: npcAssets[1].src,
+		x: 242,
+		y: 689,
+		columns: 2,
+		rows: 4,
+		renderWidth: 26,
+		renderHeight: 32,
+		row: 0,
+		animateAxis: "column",
+		animationFrames: 2,
+		animationOffset: 1,
+		shadow: true,
+	},
+	{
+		id: "creature-3-garden",
+		src: npcAssets[2].src,
+		x: 854,
+		y: 803,
+		columns: 2,
+		rows: 4,
+		renderWidth: 26,
+		renderHeight: 32,
+		row: 3,
+		shadow: true,
+	},
+	{
+		id: "creature-4-route",
+		src: npcAssets[3].src,
+		x: 666,
+		y: 767,
+		columns: 2,
+		rows: 4,
+		renderWidth: 26,
+		renderHeight: 32,
+		row: 1,
+		animateAxis: "column",
+		animationFrames: 2,
+		shadow: true,
+	},
+	{
+		id: "creature-5-south",
+		src: npcAssets[4].src,
+		x: 421,
+		y: 841,
+		columns: 2,
+		rows: 4,
+		renderWidth: 26,
+		renderHeight: 32,
+		row: 0,
+		animateAxis: "column",
+		animationFrames: 2,
+		animationOffset: 1,
+		shadow: true,
+	},
+	{
+		id: "bench-sitter",
+		src: mainCharacterAssets[10].src,
+		x: 246,
+		y: 515,
+		columns: 1,
+		rows: 4,
+		renderWidth: 24,
+		renderHeight: 32,
+		row: 0,
+		shadow: true,
+	},
+	{
+		id: "parked-bike",
+		src: mainCharacterAssets[0].src,
+		x: 647,
+		y: 360,
+		columns: 1,
+		rows: 4,
+		renderWidth: 18,
+		renderHeight: 32,
+		row: 1,
+		shadow: true,
+	},
+	{
+		id: "fountain-wave",
+		src: mainCharacterAssets[14].src,
+		x: 276,
+		y: 696,
+		columns: 2,
+		rows: 1,
+		renderWidth: 32,
+		renderHeight: 16,
+		row: 0,
+		animateAxis: "column",
+		animationFrames: 2,
+		emote: {
+			src: SPARKLE_EFFECT_PATH,
+			x: 6,
+			y: -14,
+			columns: 1,
+			rows: 6,
+			renderWidth: 16,
+			renderHeight: 16,
+			animateAxis: "row",
+			animationFrames: 6,
+			animationOffset: 2,
+		},
+	},
+];
+
+function getTrainerSpriteRow(facing: FacingDirection) {
+	if (facing === "down") {
+		return 0;
+	}
+
+	if (facing === "left") {
+		return 1;
+	}
+
+	if (facing === "up") {
+		return 2;
+	}
+
+	return 3;
+}
+
+function getAnimatedCell({
+	animateAxis,
+	animationFrames,
+	animationOffset = 0,
+	baseColumn = 0,
+	baseRow = 0,
+	spriteTick,
+}: {
+	animateAxis?: "column" | "row";
+	animationFrames?: number;
+	animationOffset?: number;
+	baseColumn?: number;
+	baseRow?: number;
+	spriteTick: number;
+}) {
+	if (!animateAxis || !animationFrames || animationFrames < 2) {
+		return {
+			column: baseColumn,
+			row: baseRow,
+		};
+	}
+
+	if (animateAxis === "row") {
+		const peakFrame =
+			animationFrames >= 4
+				? animationFrames - 2
+				: Math.floor((animationFrames - 1) / 2);
+		const settleFrame = Math.min(animationFrames - 1, peakFrame + 1);
+		const rowSequence = [
+			...Array.from({ length: peakFrame + 1 }, (_, index) => index),
+			...Array.from({ length: 4 }, () => peakFrame),
+			...Array.from(
+				{ length: settleFrame > peakFrame ? 2 : 0 },
+				() => settleFrame,
+			),
+		];
+		const animatedFrame =
+			rowSequence[(spriteTick + animationOffset) % rowSequence.length] ?? peakFrame;
+
+		return {
+			column: baseColumn,
+			row: animatedFrame,
+		};
+	}
+
+	const animatedFrame = (spriteTick + animationOffset) % animationFrames;
+
+	return {
+		column: animatedFrame,
+		row: baseRow,
+	};
+}
+
+function getOneShotRowCell({
+	animationFrames,
+	baseColumn = 0,
+	baseRow = 0,
+	progressMs,
+}: {
+	animationFrames?: number;
+	baseColumn?: number;
+	baseRow?: number;
+	progressMs: number;
+}) {
+	if (!animationFrames || animationFrames < 2) {
+		return {
+			column: baseColumn,
+			row: baseRow,
+		};
+	}
+
+	const peakFrame =
+		animationFrames >= 4
+			? animationFrames - 2
+			: Math.floor((animationFrames - 1) / 2);
+	const settleFrame = Math.min(animationFrames - 1, peakFrame + 1);
+	const rowSequence = [
+		...Array.from({ length: peakFrame + 1 }, (_, index) => index),
+		...Array.from({ length: 4 }, () => peakFrame),
+		...Array.from(
+			{ length: settleFrame > peakFrame ? 2 : 0 },
+			() => settleFrame,
+		),
+	];
+	const frameDurationMs = 120;
+	const sequenceIndex = Math.min(
+		Math.floor(progressMs / frameDurationMs),
+		rowSequence.length - 1,
+	);
+	const animatedFrame = rowSequence[sequenceIndex] ?? peakFrame;
+
+	return {
+		column: baseColumn,
+		row: animatedFrame,
+	};
+}
+
 export function TownMapOverlay({
 	activeDraftPoints,
 	activePolygonKind,
 	activeStopId,
+	ambientSprites,
 	characterVisible,
 	devDrafts,
 	devInteractionMode,
@@ -78,12 +546,16 @@ export function TownMapOverlay({
 	showPointHandles,
 	stops,
 	svgRef,
+	trainerFrame,
+	trainerMoving,
 	trainerTransform,
 	visibleStopId,
+	worldSpriteTick,
 }: {
 	activeDraftPoints: Position[];
 	activePolygonKind: DevPolygonKind | null;
 	activeStopId: StopId | null;
+	ambientSprites: AmbientSpriteActor[];
 	characterVisible: boolean;
 	devDrafts: DevMapDrafts;
 	devInteractionMode: DevInteractionMode;
@@ -104,8 +576,11 @@ export function TownMapOverlay({
 	showPointHandles: boolean;
 	stops: TownStop[];
 	svgRef: RefObject<SVGSVGElement | null>;
+	trainerFrame: number;
+	trainerMoving: boolean;
 	trainerTransform: string;
 	visibleStopId: StopId | null;
+	worldSpriteTick: number;
 }) {
 	const activePolygonPoints =
 		activePolygonKind === "walkable" ||
@@ -118,6 +593,12 @@ export function TownMapOverlay({
 			? []
 			: activePolygonPoints.filter((entry) => entry.id === devRegionId);
 	const showStopTooltip = !isDev || devInteractionMode === "view";
+	const trainerSpriteRow = getTrainerSpriteRow(facing);
+	const trainerSpriteColumn = trainerMoving ? trainerFrame : 0;
+	const sortedAmbientSprites = [...ambientSprites].sort(
+		(first, second) =>
+			first.position.y + first.renderHeight - (second.position.y + second.renderHeight),
+	);
 
 	return (
 		<svg
@@ -129,6 +610,42 @@ export function TownMapOverlay({
 			role="img"
 			aria-label="Pokemon-inspired portfolio town map"
 		>
+			<defs>
+				<clipPath id={TRAINER_SPRITE_CLIP_ID}>
+					<rect
+						x="0"
+						y="0"
+						width={TRAINER_SPRITE_RENDER_SIZE}
+						height={TRAINER_SPRITE_RENDER_SIZE}
+					/>
+				</clipPath>
+				{sortedAmbientSprites.map((sprite) => (
+					<clipPath id={`ambient-${sprite.id}-clip`} key={`clip-${sprite.id}`}>
+						<rect
+							x={sprite.position.x}
+							y={sprite.position.y}
+							width={sprite.renderWidth}
+							height={sprite.renderHeight}
+						/>
+					</clipPath>
+				))}
+				{sortedAmbientSprites
+					.filter((sprite) => sprite.emote)
+					.map((sprite) => (
+						<clipPath
+							id={`ambient-${sprite.id}-emote-clip`}
+							key={`clip-emote-${sprite.id}`}
+						>
+							<rect
+								x={sprite.position.x + sprite.emote!.x}
+								y={sprite.position.y + sprite.emote!.y}
+								width={sprite.emote!.renderWidth}
+								height={sprite.emote!.renderHeight}
+							/>
+						</clipPath>
+					))}
+			</defs>
+
 			{isDev ? (
 				<g className="walk-debug">
 					{effectiveLayerVisibility.walkable
@@ -216,6 +733,91 @@ export function TownMapOverlay({
 								</g>
 							))
 						: null}
+				</g>
+			) : null}
+
+			{sortedAmbientSprites.length > 0 ? (
+				<g className="ambient-sprite-layer" pointerEvents="none" aria-hidden="true">
+					{sortedAmbientSprites.map((sprite) => {
+						const spriteIsStatic = STATIC_AMBIENT_SPRITE_IDS.has(sprite.id);
+						const spriteCell = getAnimatedCell({
+							animateAxis:
+								spriteIsStatic || sprite.moving ? sprite.animateAxis : undefined,
+							animationFrames:
+								spriteIsStatic || sprite.moving ? sprite.animationFrames : undefined,
+							animationOffset: sprite.animationOffset,
+							baseColumn: sprite.column,
+							baseRow: spriteIsStatic
+								? (sprite.row ?? 0)
+								: getTrainerSpriteRow(sprite.facing),
+							spriteTick: worldSpriteTick,
+						});
+						const emoteCell = sprite.emote
+							? sprite.emote.animateAxis === "row"
+								? getOneShotRowCell({
+										animationFrames: sprite.emote.animationFrames,
+										progressMs: sprite.emoteAnimationMs,
+									})
+								: getAnimatedCell({
+										animateAxis: sprite.emote.animateAxis,
+										animationFrames: sprite.emote.animationFrames,
+										animationOffset: sprite.emote.animationOffset,
+										spriteTick: Math.floor(worldSpriteTick / 3),
+									})
+							: null;
+
+						return (
+							<g className="ambient-sprite" key={sprite.id}>
+								{sprite.shadow ? (
+									<ellipse
+										className="ambient-sprite__shadow"
+										cx={sprite.position.x + sprite.renderWidth / 2}
+										cy={sprite.position.y + sprite.renderHeight - 1}
+										rx={Math.max(5, sprite.renderWidth * 0.26)}
+										ry={Math.max(2.5, sprite.renderHeight * 0.09)}
+									/>
+								) : null}
+								<g clipPath={`url(#ambient-${sprite.id}-clip)`}>
+									<image
+										className="ambient-sprite__sheet"
+										href={sprite.src}
+										x={
+											sprite.position.x -
+											spriteCell.column * sprite.renderWidth
+										}
+										y={
+											sprite.position.y -
+											spriteCell.row * sprite.renderHeight
+										}
+										width={sprite.renderWidth * sprite.columns}
+										height={sprite.renderHeight * sprite.rows}
+										preserveAspectRatio="none"
+									/>
+								</g>
+								{sprite.emote && sprite.emoteVisible && emoteCell ? (
+									<g clipPath={`url(#ambient-${sprite.id}-emote-clip)`}>
+										<image
+											className="ambient-sprite__effect"
+											href={sprite.emote.src}
+											x={
+												sprite.position.x +
+												sprite.emote.x -
+												emoteCell.column * sprite.emote.renderWidth
+											}
+											y={
+												sprite.position.y +
+												sprite.emote.y -
+												emoteCell.row * sprite.emote.renderHeight
+											}
+											width={sprite.emote.renderWidth * sprite.emote.columns}
+											height={sprite.emote.renderHeight * sprite.emote.rows}
+											preserveAspectRatio="none"
+										/>
+									</g>
+								) : null}
+							</g>
+						);
+					})}
 				</g>
 			) : null}
 
@@ -413,78 +1015,23 @@ export function TownMapOverlay({
 			})}
 
 			<g
-				className={`trainer-svg ${characterVisible ? "" : "trainer-svg--hidden"}`}
+				className={`trainer-sprite ${characterVisible ? "" : "trainer-sprite--hidden"}`}
 				transform={trainerTransform}
 				pointerEvents="none"
 				aria-hidden="true"
 			>
-				{/* Shadow */}
-				<ellipse className="trainer-svg__shadow" cx="16" cy="36" rx="10" ry="4" />
-				
-				{/* Backpack (Classic yellow bag) - Hidden when facing up, on sides when facing left/right */}
-				{facing === "down" && (
-					<rect fill="#ffd056" x="21" y="18" width="4" height="8" />
-				)}
-				{facing === "left" && (
-					<rect fill="#ffd056" x="18" y="17" width="5" height="9" />
-				)}
-				{facing === "right" && (
-					<rect fill="#ffd056" x="9" y="17" width="5" height="9" />
-				)}
-				{facing === "up" && (
-					<rect fill="#ffd056" x="10" y="17" width="12" height="6" />
-				)}
-				
-				{/* Legs/Pants */}
-				<rect fill="#303030" x="11" y="28" width="4" height="6" />
-				<rect fill="#303030" x="17" y="28" width="4" height="6" />
-				
-				{/* Body/Coat */}
-				<rect className="trainer-svg__coat" x="9" y="16" width="14" height="13" />
-				<rect fill="#ffffff" x="13" y="16" width="6" height="4" />
-				
-				{/* Face/Skin */}
-				<rect className="trainer-svg__face" x="11" y="8" width="10" height="9" />
-				
-				{/* Eyes - Only visible when facing down, left, or right */}
-				{facing === "down" && (
-					<>
-						<rect fill="#000000" x="13" y="11" width="1" height="2" />
-						<rect fill="#000000" x="18" y="11" width="1" height="2" />
-					</>
-				)}
-				{facing === "left" && (
-					<rect fill="#000000" x="12" y="11" width="1" height="2" />
-				)}
-				{facing === "right" && (
-					<rect fill="#000000" x="19" y="11" width="1" height="2" />
-				)}
-				
-				{/* Cap (Backwards cap) */}
-				<rect className="trainer-svg__cap" x="9" y="4" width="14" height="5" />
-				{/* Bill flips based on direction */}
-				{facing === "down" && <rect className="trainer-svg__cap" x="7" y="6" width="2" height="3" />}
-				{facing === "up" && <rect className="trainer-svg__cap" x="23" y="6" width="2" height="3" />}
-				{facing === "left" && <rect className="trainer-svg__cap" x="15" y="3" width="3" height="2" />}
-				{facing === "right" && <rect className="trainer-svg__cap" x="14" y="3" width="3" height="2" />}
-				
-				{/* Dynamic Outlines based on direction */}
-				<path
-					className="trainer-svg__outline"
-					fill="none"
-					d={`
-						M9 4h14v5h-14z 
-						${facing === "down" ? "M7 6h2v3h-2z" : ""}
-						${facing === "up" ? "M23 6h2v3h-2z" : ""}
-						${facing === "left" || facing === "right" ? "M14 3h5v2h-5z" : ""}
-						M9 16h14v13h-14z 
-						M11 8h10v9h-10z 
-						M11 28h4v6h-4z 
-						M17 28h4v6h-4z
-						${facing === "down" ? "M21 18h4v8h-4z" : ""}
-						${facing === "up" ? "M10 17h12v6h-12z" : ""}
-					`}
-				/>
+				<ellipse className="trainer-sprite__shadow" cx="16" cy="34" rx="8" ry="3.5" />
+				<g clipPath={`url(#${TRAINER_SPRITE_CLIP_ID})`}>
+					<image
+						className="trainer-sprite__sheet"
+						href={TRAINER_SPRITE_PATH}
+						x={-trainerSpriteColumn * TRAINER_SPRITE_RENDER_SIZE}
+						y={-trainerSpriteRow * TRAINER_SPRITE_RENDER_SIZE}
+						width={TRAINER_SPRITE_RENDER_SIZE * 4}
+						height={TRAINER_SPRITE_RENDER_SIZE * 4}
+						preserveAspectRatio="none"
+					/>
+				</g>
 			</g>
 
 			{/* Tooltip Layer - Always on top */}

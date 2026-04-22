@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { PortfolioContent, StopId, TownStop } from "@/lib/portfolio-content";
+import { AssetAnnexPanel } from "./asset-annexes";
 import { GameShelf } from "./game-shelf";
 import { PixelSelect } from "./pixel-select";
 
@@ -16,6 +17,14 @@ export function PortfolioStopPanel({
 	content: PortfolioContent;
 	stop: TownStop;
 }) {
+	if (
+		stop.id === "coming-soon" ||
+		stop.id === "coming-soon-2" ||
+		stop.id === "coming-soon-3"
+	) {
+		return <AssetAnnexPanel stopId={stop.id} />;
+	}
+
 	const detailMode = getStopDetailMode(stop);
 
 	if (detailMode === "about") {
@@ -174,89 +183,6 @@ export function PortfolioStopPanel({
 							<p className="m-0 text-lg leading-snug text-ink-soft">{entry.note}</p>
 						</a>
 					))}
-				</div>
-			</div>
-		);
-	}
-
-	if (detailMode === "coming-soon") {
-		return (
-			<div className="flex flex-col gap-6">
-				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-						<p className="pixel-eyebrow">Reserved Build Site</p>
-						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
-							Slot {stop.order}
-						</span>
-					</div>
-					<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
-						<div className="flex flex-col gap-4">
-							<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">{stop.title}</h3>
-							<p className="text-lg leading-relaxed sm:text-2xl">
-								This route is still empty on purpose. It is being held for the next
-								portfolio drop so new work arrives with its own front door instead
-								of getting buried inside an older room.
-								<span className="pixel-arrow">▼</span>
-							</p>
-						</div>
-						<div className="flex w-full flex-col gap-4 lg:min-w-[280px]">
-							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
-								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Status</span>
-								<strong className="text-xl leading-tight">Reserved</strong>
-							</div>
-							<div className="pixel-card flex flex-col gap-1 bg-panel-strong p-4">
-								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Priority</span>
-								<strong className="text-xl leading-tight">Next notable addition</strong>
-							</div>
-						</div>
-					</div>
-				</section>
-
-				<div className="grid grid-cols-1 gap-6">
-					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-5 sm:p-8">
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<p className="pixel-eyebrow">Possible Directions</p>
-							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
-								Three Lanes
-							</span>
-						</div>
-
-						<div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-							{[
-								{ id: "01", title: "Fresh Case Study", body: "A full project room with stronger process notes, links, and final presentation." },
-								{ id: "02", title: "Playable Prototype", body: "A smaller release that deserves its own shelf, playable link, and supporting context." },
-								{ id: "03", title: "Design Writing", body: "A critical piece that expands the portfolio through analysis, theory, and reflection." }
-							].map((lane) => (
-								<article className="pixel-card flex flex-col gap-2 bg-white/60 p-5" key={lane.id}>
-									<p className="pixel-eyebrow text-xs!">{lane.id}</p>
-									<strong className="text-xl leading-tight">{lane.title}</strong>
-									<p className="m-0 text-lg leading-snug text-ink-soft">{lane.body}</p>
-								</article>
-							))}
-						</div>
-					</section>
-
-					<section className="pixel-card flex flex-col gap-6 bg-panel-strong/50 p-5 sm:p-8">
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<p className="pixel-eyebrow">Current Signal</p>
-							<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
-								At A Glance
-							</span>
-						</div>
-						<p className="m-0 text-lg leading-relaxed sm:text-xl">{stop.preview}</p>
-						<div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-							{[
-								{ title: "Worth the detour", body: "The next room should add a new angle to the portfolio, not repeat an existing stop." },
-								{ title: "Readable fast", body: "Even playful work should still make its point in one quick pass." },
-								{ title: "Linked out cleanly", body: "Every future stop should end with a clear action: play, watch, read, or reach out." }
-							].map((principle) => (
-								<div className="pixel-card flex flex-col gap-2 bg-white/40 p-5" key={principle.title}>
-									<strong className="text-lg leading-tight">{principle.title}</strong>
-									<p className="m-0 text-base leading-snug text-ink-soft">{principle.body}</p>
-								</div>
-							))}
-						</div>
-					</section>
 				</div>
 			</div>
 		);

@@ -229,12 +229,13 @@ export const townStops: TownStop[] = [
 	{
 		id: "coming-soon",
 		order: "06",
-		title: "Workshop Annex",
-		shortLabel: "Coming Soon",
+		title: "Sprite Studio",
+		shortLabel: "Sprite Lab",
 		detailMode: "coming-soon",
-		subtitle: "A reserved room for the next project drop, experiment, or writing piece.",
-		preview: "Future work will land here once the next branch of the portfolio is ready.",
-		recommendation: "Check back here for the next update.",
+		subtitle:
+			"The protagonist pack, dialogue chrome, and interface flourishes collected into one dedicated annex.",
+		preview: "See the full trainer set, portrait variants, and effect sheets together.",
+		recommendation: "Best stop if you want the new hero art and UI kit in one room.",
 		outline: [
 			{ x: 561.0740966796875, y: 427.8646240234375 },
 			{ x: 599.0530395507812, y: 406.5442810058594 },
@@ -249,12 +250,13 @@ export const townStops: TownStop[] = [
 	{
 		id: "coming-soon-2",
 		order: "07",
-		title: "Upper Route Annex",
-		shortLabel: "Coming Soon",
+		title: "Field Guide",
+		shortLabel: "NPC Deck",
 		detailMode: "coming-soon",
-		subtitle: "A second reserved room for upcoming showcase work or a new route branch.",
-		preview: "Kept open for another future piece once the next expansion is ready.",
-		recommendation: "A placeholder for the portfolio's next branch.",
+		subtitle:
+			"A route-side roster of NPCs, creatures, and tile sheets that flesh out the town's cast and systems.",
+		preview: "Browse the new NPC lineup and the supporting environment pieces.",
+		recommendation: "Best stop for the wider cast and interaction materials.",
 		outline: [
 			{ x: 839.77734375, y: 162.03443908691406 },
 			{ x: 910.0344848632812, y: 168.5411834716797 },
@@ -271,12 +273,13 @@ export const townStops: TownStop[] = [
 	{
 		id: "coming-soon-3",
 		order: "08",
-		title: "South Route Annex",
-		shortLabel: "Coming Soon",
+		title: "Reference Archive",
+		shortLabel: "World Atlas",
 		detailMode: "coming-soon",
-		subtitle: "A third reserved room for later case studies, writing, or another experiment shelf.",
-		preview: "Space held for another future addition to the town.",
-		recommendation: "Reserved for a later portfolio expansion.",
+		subtitle:
+			"The map studies, environment mockups, and inspiration boards arranged as a readable archive.",
+		preview: "Move through the added maps first, then the full reference wall.",
+		recommendation: "Best stop if you want to see the raw world-building material.",
 		outline: [
 			{ x: 242.47386169433594, y: 412.29840087890625 },
 			{ x: 276.82452392578125, y: 394.21038818359375 },

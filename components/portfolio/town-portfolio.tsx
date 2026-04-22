@@ -25,7 +25,12 @@ import {
 	type DevPolygonDraft,
 } from "./map-dev-tool";
 import { PortfolioStopPanel } from "./portfolio-stop-panel";
-import { TownMapOverlay } from "./town-map-overlay";
+import {
+	OVERWORLD_AMBIENT_SPRITES,
+	TownMapOverlay,
+	type AmbientSpriteActor,
+	type FacingDirection,
+} from "./town-map-overlay";
 import {
 	clamp,
 	type DragTarget,
@@ -167,6 +172,149 @@ function getCameraFrame({
 	return { scale, x, y };
 }
 
+type AmbientActorState = AmbientSpriteActor & {
+	conversationCooldownRemainingMs: number;
+	conversationPartnerId: string | null;
+	conversationRemainingMs: number;
+	emoteAnimationMs: number;
+	emoteRemainingMs: number;
+	path: Position[];
+	playerInteractionCooldownRemainingMs: number;
+	playerInteractionRemainingMs: number;
+};
+
+const STATIC_AMBIENT_ACTOR_IDS = new Set([
+	"bench-sitter",
+	"parked-bike",
+	"fountain-wave",
+]);
+
+function getFacingFromRow(row = 0): FacingDirection {
+	if (row === 1) {
+		return "left";
+	}
+
+	if (row === 2) {
+		return "up";
+	}
+
+	if (row === 3) {
+		return "right";
+	}
+
+	return "down";
+}
+
+function getFacingFromVector(dx: number, dy: number): FacingDirection {
+	if (Math.abs(dx) > Math.abs(dy)) {
+		return dx >= 0 ? "right" : "left";
+	}
+
+	return dy >= 0 ? "down" : "up";
+}
+
+function isStaticAmbientActor(actorId: string) {
+	return STATIC_AMBIENT_ACTOR_IDS.has(actorId);
+}
+
+function isConversationalAmbientActor(actorId: string) {
+	return !isStaticAmbientActor(actorId) && !actorId.startsWith("creature");
+}
+
+function getAmbientSpeedRange(actorId: string) {
+	if (actorId.startsWith("creature")) {
+		return { min: 24, max: 40 };
+	}
+
+	return { min: 32, max: 56 };
+}
+
+function getAmbientRoamRadius(actorId: string) {
+	if (actorId.startsWith("creature")) {
+		return 58;
+	}
+
+	if (actorId.startsWith("snpc")) {
+		return 72;
+	}
+
+	return 88;
+}
+
+function getAmbientIdleDurationMs(actorId: string) {
+	if (actorId.startsWith("creature")) {
+		return 400 + Math.random() * 1000;
+	}
+
+	return 700 + Math.random() * 1800;
+}
+
+function getAmbientEmoteDurationMs(actorId: string) {
+	if (actorId.startsWith("creature")) {
+		return 3800 + Math.random() * 2400;
+	}
+
+	return 4200 + Math.random() * 3200;
+}
+
+function getAmbientPostEmoteIdleMs(actorId: string) {
+	if (actorId.startsWith("creature")) {
+		return 320 + Math.random() * 380;
+	}
+
+	return 480 + Math.random() * 520;
+}
+
+function getAmbientFeetPosition(actor: Pick<AmbientActorState, "position" | "renderHeight" | "renderWidth">): Position {
+	return {
+		x: actor.position.x + actor.renderWidth / 2,
+		y: actor.position.y + actor.renderHeight - 4,
+	};
+}
+
+function getAmbientPositionFromFeet(
+	feet: Position,
+	actor: Pick<AmbientActorState, "renderHeight" | "renderWidth">,
+): Position {
+	return {
+		x: feet.x - actor.renderWidth / 2,
+		y: feet.y - actor.renderHeight + 4,
+	};
+}
+
+function createAmbientActors(backgroundId: TownMapBackgroundId): AmbientActorState[] {
+	if (backgroundId !== defaultTownMapBackgroundId) {
+		return [];
+	}
+
+	return OVERWORLD_AMBIENT_SPRITES.map((sprite) => {
+		const speedRange = getAmbientSpeedRange(sprite.id);
+
+		return {
+			...sprite,
+			conversationCooldownRemainingMs: 0,
+			conversationPartnerId: null,
+			conversationRemainingMs: 0,
+			emoteAnimationMs: 0,
+			emoteRemainingMs: sprite.defaultEmoteVisible ? 3200 : 0,
+			emoteVisible: Boolean(sprite.defaultEmoteVisible),
+			facing: getFacingFromRow(sprite.row),
+			idleRemainingMs: isStaticAmbientActor(sprite.id)
+				? 0
+				: getAmbientIdleDurationMs(sprite.id),
+			moving: false,
+			path: [],
+			playerInteractionCooldownRemainingMs: 0,
+			playerInteractionRemainingMs: 0,
+			position: { x: sprite.x, y: sprite.y },
+			spawn: { x: sprite.x, y: sprite.y },
+			speed:
+				speedRange.min + Math.random() * (speedRange.max - speedRange.min),
+			target: null,
+		};
+	});
+}
+
 export function TownPortfolio({
 	content,
 	stops,
@@ -204,10 +352,15 @@ export function TownPortfolio({
 	const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 	const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
 	const [keyboardMoving, setKeyboardMoving] = useState(false);
+	const [pathMoving, setPathMoving] = useState(false);
 	const [proximitySuppressed, setProximitySuppressed] = useState(false);
 	const [facing, setFacing] = useState<"up" | "down" | "left" | "right">("down");
 	const [cameraReady, setCameraReady] = useState(false);
 	const [showLegacyBackground, setShowLegacyBackground] = useState(false);
+	const [spriteTick, setSpriteTick] = useState(0);
+	const [ambientActors, setAmbientActors] = useState<AmbientActorState[]>(() =>
+		createAmbientActors(defaultTownMapBackgroundId),
+	);
 	const [viewportSize, setViewportSize] = useState(() => ({
 		width: typeof window === "undefined" ? defaultMapVariant.width : window.innerWidth,
 		height:
@@ -224,6 +377,7 @@ export function TownPortfolio({
 	const movementTickRef = useRef<((timestamp: number) => void) | null>(null);
 	const pressedKeysRef = useRef<Set<string>>(new Set());
 	const positionRef = useRef(defaultMapVariant.startPosition);
+	const ambientAnimationFrameRef = useRef<number | null>(null);
 	const svgRef = useRef<SVGSVGElement | null>(null);
 	const viewportRef = useRef<HTMLDivElement | null>(null);
 	const availableBackgrounds = useMemo(
@@ -399,6 +553,18 @@ export function TownPortfolio({
 	}, []);
 
 	useEffect(() => {
+		const interval = window.setInterval(() => {
+			setSpriteTick((current) => current + 1);
+		}, prefersReducedMotion ? 220 : 140);
+
+		return () => window.clearInterval(interval);
+	}, [prefersReducedMotion]);
+
+	useEffect(() => {
+		setAmbientActors(createAmbientActors(activeBackgroundId));
+	}, [activeBackgroundId]);
+
+	useEffect(() => {
 		positionRef.current = characterPosition;
 	}, [characterPosition]);
 
@@ -432,6 +598,9 @@ export function TownPortfolio({
 			if (movementFrameRef.current) {
 				window.cancelAnimationFrame(movementFrameRef.current);
 			}
+			if (ambientAnimationFrameRef.current) {
+				window.cancelAnimationFrame(ambientAnimationFrameRef.current);
+			}
 		};
 	}, []);
 
@@ -440,6 +609,7 @@ export function TownPortfolio({
 			window.cancelAnimationFrame(travelFrameRef.current);
 			travelFrameRef.current = null;
 		}
+		setPathMoving(false);
 	}
 
 	function stopMovementLoop() {
@@ -463,9 +633,12 @@ export function TownPortfolio({
 			const finalPoint = points[points.length - 1];
 			setCharacterPosition(finalPoint);
 			positionRef.current = finalPoint;
+			setPathMoving(false);
 			onDone();
 			return;
 		}
+
+		setPathMoving(true);
 
 		let currentPointIndex = 0;
 		let startedAt: number | null = null;
@@ -480,12 +653,13 @@ export function TownPortfolio({
 
 			if (!end) {
 				travelFrameRef.current = null;
+				setPathMoving(false);
 				onDone();
 				return;
 			}
 
 			const distance = Math.hypot(end.x - start.x, end.y - start.y);
-			const duration = clamp(Math.round(distance * 3.2), 50, 2000);
+			const duration = clamp(Math.round(distance * 2.2), 40, 1400);
 			
 			const progress = Math.min((timestamp - startedAt) / duration, 1);
 			const nextPosition = {
@@ -515,6 +689,7 @@ export function TownPortfolio({
 					travelFrameRef.current = window.requestAnimationFrame(step);
 				} else {
 					travelFrameRef.current = null;
+					setPathMoving(false);
 					onDone();
 				}
 			}
@@ -1156,6 +1331,590 @@ export function TownPortfolio({
 		return path;
 	}, [activeMapVariant.height, activeMapVariant.width, isNavigablePoint]);
 
+	const hasClearTravelLine = useCallback((start: Position, end: Position) => {
+		const distance = Math.hypot(end.x - start.x, end.y - start.y);
+		const samples = Math.max(1, Math.ceil(distance / 8));
+
+		for (let index = 1; index <= samples; index += 1) {
+			const progress = index / samples;
+			const samplePoint = {
+				x: start.x + (end.x - start.x) * progress,
+				y: start.y + (end.y - start.y) * progress,
+			};
+
+			if (!isNavigablePoint(samplePoint)) {
+				return false;
+			}
+		}
+
+		return true;
+	}, [isNavigablePoint]);
+
+	const findNearestAmbientFeet = useCallback((
+		actor: AmbientActorState,
+		desiredFeet: Position,
+		actors: AmbientActorState[],
+	) => {
+		for (let radius = 0; radius <= 160; radius += 12) {
+			const steps = radius === 0 ? 1 : 16;
+
+			for (let index = 0; index < steps; index += 1) {
+				const angle = (index / steps) * Math.PI * 2;
+				const candidateFeet = {
+					x: clamp(
+						desiredFeet.x + Math.cos(angle) * radius,
+						16,
+						activeMapVariant.width - 16,
+					),
+					y: clamp(
+						desiredFeet.y + Math.sin(angle) * radius,
+						16,
+						activeMapVariant.height - 16,
+					),
+				};
+
+				if (!isNavigablePoint(candidateFeet)) {
+					continue;
+				}
+
+				if (
+					Math.hypot(
+						candidateFeet.x - characterPosition.x,
+						candidateFeet.y - characterPosition.y,
+					) < 34
+				) {
+					continue;
+				}
+
+				const overlapsActor = actors.some((otherActor) => {
+					if (otherActor.id === actor.id) {
+						return false;
+					}
+
+					const otherFeet = getAmbientFeetPosition(otherActor);
+					return (
+						Math.hypot(
+							candidateFeet.x - otherFeet.x,
+							candidateFeet.y - otherFeet.y,
+						) < 24
+					);
+				});
+
+				if (!overlapsActor) {
+					return candidateFeet;
+				}
+			}
+		}
+
+		return desiredFeet;
+	}, [
+		activeMapVariant.height,
+		activeMapVariant.width,
+		characterPosition.x,
+		characterPosition.y,
+		isNavigablePoint,
+	]);
+
+	const onAmbientTick = useEffectEvent((deltaMs: number) => {
+		const deltaSeconds = deltaMs / 1000;
+
+		setAmbientActors((currentActors) => {
+			const nextActors = currentActors.map((actor) => {
+				const nextActor: AmbientActorState = {
+					...actor,
+					path: [...actor.path],
+				};
+				let currentFeet = getAmbientFeetPosition(nextActor);
+
+				if (!isNavigablePoint(currentFeet)) {
+					const repairedFeet = findNearestAmbientFeet(
+						nextActor,
+						currentFeet,
+						currentActors,
+					);
+					nextActor.position = getAmbientPositionFromFeet(
+						repairedFeet,
+						nextActor,
+					);
+					nextActor.spawn = nextActor.position;
+					nextActor.path = [];
+					nextActor.target = null;
+					nextActor.moving = false;
+					currentFeet = repairedFeet;
+				}
+
+				if (isStaticAmbientActor(actor.id)) {
+					return {
+						...nextActor,
+						conversationCooldownRemainingMs: 0,
+						conversationPartnerId: null,
+						conversationRemainingMs: 0,
+						emoteAnimationMs: nextActor.defaultEmoteVisible
+							? nextActor.emoteAnimationMs + deltaMs
+							: 0,
+						emoteRemainingMs: nextActor.defaultEmoteVisible
+							? Number.POSITIVE_INFINITY
+							: Math.max(0, nextActor.emoteRemainingMs - deltaMs),
+						emoteVisible:
+							nextActor.defaultEmoteVisible ||
+							nextActor.emoteRemainingMs > 0,
+						playerInteractionCooldownRemainingMs: 0,
+						playerInteractionRemainingMs: 0,
+					};
+				}
+
+				nextActor.conversationRemainingMs = Math.max(
+					0,
+					nextActor.conversationRemainingMs - deltaMs,
+				);
+				nextActor.conversationCooldownRemainingMs = Math.max(
+					0,
+					nextActor.conversationCooldownRemainingMs - deltaMs,
+				);
+				nextActor.playerInteractionCooldownRemainingMs = Math.max(
+					0,
+					nextActor.playerInteractionCooldownRemainingMs - deltaMs,
+				);
+				nextActor.playerInteractionRemainingMs = Math.max(
+					0,
+					nextActor.playerInteractionRemainingMs - deltaMs,
+				);
+
+				if (nextActor.target) {
+					nextActor.conversationPartnerId = null;
+					nextActor.conversationRemainingMs = 0;
+					nextActor.playerInteractionRemainingMs = 0;
+					const dx = nextActor.target.x - currentFeet.x;
+					const dy = nextActor.target.y - currentFeet.y;
+					const distance = Math.hypot(dx, dy);
+					const step = nextActor.speed * deltaSeconds;
+
+					nextActor.facing = getFacingFromVector(dx, dy);
+					nextActor.emoteVisible = false;
+					nextActor.emoteAnimationMs = 0;
+					nextActor.emoteRemainingMs = 0;
+
+					if (distance <= step || distance < 2) {
+						nextActor.position = getAmbientPositionFromFeet(
+							nextActor.target,
+							nextActor,
+						);
+						nextActor.path = nextActor.path.slice(1);
+						nextActor.target = nextActor.path[0] ?? null;
+						nextActor.moving = nextActor.target !== null;
+
+						if (!nextActor.target) {
+							nextActor.idleRemainingMs = getAmbientIdleDurationMs(nextActor.id);
+							nextActor.emoteRemainingMs =
+								Boolean(nextActor.emote) && Math.random() > 0.7
+									? getAmbientEmoteDurationMs(nextActor.id)
+									: 0;
+							nextActor.emoteAnimationMs = 0;
+							nextActor.idleRemainingMs = Math.max(
+								nextActor.idleRemainingMs,
+								nextActor.emoteRemainingMs +
+									getAmbientPostEmoteIdleMs(nextActor.id),
+							);
+							nextActor.emoteVisible = nextActor.emoteRemainingMs > 0;
+						}
+
+						return nextActor;
+					}
+
+					const nextFeet = {
+						x: currentFeet.x + (dx / distance) * step,
+						y: currentFeet.y + (dy / distance) * step,
+					};
+
+					if (!isNavigablePoint(nextFeet)) {
+						nextActor.target = null;
+						nextActor.path = [];
+						nextActor.moving = false;
+						nextActor.idleRemainingMs = 500 + Math.random() * 1200;
+						nextActor.emoteAnimationMs = 0;
+						nextActor.emoteRemainingMs = 0;
+						return nextActor;
+					}
+
+					nextActor.position = getAmbientPositionFromFeet(nextFeet, nextActor);
+					nextActor.moving = true;
+					return nextActor;
+				}
+
+				nextActor.moving = false;
+				nextActor.emoteAnimationMs =
+					nextActor.emoteRemainingMs > 0
+						? nextActor.emoteAnimationMs + deltaMs
+						: 0;
+				nextActor.emoteRemainingMs = Math.max(
+					0,
+					nextActor.emoteRemainingMs - deltaMs,
+				);
+				nextActor.emoteVisible = nextActor.emoteRemainingMs > 0;
+				nextActor.idleRemainingMs = Math.max(
+					0,
+					nextActor.idleRemainingMs - deltaMs,
+				);
+
+				if (
+					nextActor.conversationRemainingMs > 0 &&
+					nextActor.conversationPartnerId
+				) {
+					return nextActor;
+				}
+
+				if (nextActor.playerInteractionRemainingMs > 0) {
+					const playerDx = characterPosition.x - currentFeet.x;
+					const playerDy = characterPosition.y - currentFeet.y;
+					const playerDistance = Math.hypot(playerDx, playerDy);
+
+					if (playerDistance <= 92 && hasClearTravelLine(currentFeet, characterPosition)) {
+						nextActor.facing = getFacingFromVector(playerDx, playerDy);
+						nextActor.idleRemainingMs = Math.max(
+							nextActor.idleRemainingMs,
+							120,
+						);
+						return nextActor;
+					}
+
+					nextActor.playerInteractionRemainingMs = 0;
+				}
+
+				if (nextActor.idleRemainingMs > 0) {
+					nextActor.conversationPartnerId = null;
+					return nextActor;
+				}
+
+				const spawnFeet = getAmbientFeetPosition({
+					...nextActor,
+					position: nextActor.spawn,
+				});
+				const roamRadius = getAmbientRoamRadius(nextActor.id);
+				let nextPath: Position[] | null = null;
+
+				for (let attempt = 0; attempt < 14; attempt += 1) {
+					const angle = Math.random() * Math.PI * 2;
+					const distance = 18 + Math.random() * roamRadius;
+					const candidateFeet = {
+						x: clamp(
+							spawnFeet.x + Math.cos(angle) * distance,
+							16,
+							activeMapVariant.width - 16,
+						),
+						y: clamp(
+							spawnFeet.y + Math.sin(angle) * distance,
+							16,
+							activeMapVariant.height - 16,
+						),
+					};
+
+					if (!isNavigablePoint(candidateFeet)) {
+						continue;
+					}
+
+					if (
+						Math.hypot(
+							candidateFeet.x - characterPosition.x,
+							candidateFeet.y - characterPosition.y,
+						) < 34
+					) {
+						continue;
+					}
+
+					const overlapsOtherActor = currentActors.some((otherActor) => {
+						if (otherActor.id === nextActor.id) {
+							return false;
+						}
+
+						const otherFeet = getAmbientFeetPosition(otherActor);
+						return (
+							Math.hypot(
+								candidateFeet.x - otherFeet.x,
+								candidateFeet.y - otherFeet.y,
+							) < 24
+						);
+					});
+
+					if (overlapsOtherActor) {
+						continue;
+					}
+
+					const candidatePath = findPath(currentFeet, candidateFeet);
+					if (candidatePath.length < 2) {
+						continue;
+					}
+
+					if (
+						candidatePath.length === 2 &&
+						!hasClearTravelLine(currentFeet, candidateFeet)
+					) {
+						continue;
+					}
+
+					nextPath = candidatePath.slice(1);
+					break;
+				}
+
+				if (!nextPath || nextPath.length === 0) {
+					nextActor.idleRemainingMs = 500 + Math.random() * 1000;
+					nextActor.emoteRemainingMs =
+						Boolean(nextActor.emote) && Math.random() > 0.84
+							? getAmbientEmoteDurationMs(nextActor.id)
+							: 0;
+					nextActor.emoteAnimationMs = 0;
+					nextActor.idleRemainingMs = Math.max(
+						nextActor.idleRemainingMs,
+						nextActor.emoteRemainingMs +
+							getAmbientPostEmoteIdleMs(nextActor.id),
+					);
+					nextActor.emoteVisible = nextActor.emoteRemainingMs > 0;
+					return nextActor;
+				}
+
+				const speedRange = getAmbientSpeedRange(nextActor.id);
+				nextActor.speed =
+					speedRange.min + Math.random() * (speedRange.max - speedRange.min);
+				nextActor.path = nextPath;
+				nextActor.target = nextPath[0] ?? null;
+				nextActor.moving = nextActor.target !== null;
+				nextActor.conversationPartnerId = null;
+				nextActor.conversationRemainingMs = 0;
+				nextActor.emoteVisible = false;
+				nextActor.emoteAnimationMs = 0;
+				nextActor.emoteRemainingMs = 0;
+
+				if (nextActor.target) {
+					nextActor.facing = getFacingFromVector(
+						nextActor.target.x - currentFeet.x,
+						nextActor.target.y - currentFeet.y,
+					);
+				}
+
+				return nextActor;
+			});
+
+			for (const actor of nextActors) {
+				if (
+					actor.conversationRemainingMs <= 0 ||
+					!actor.conversationPartnerId
+				) {
+					actor.conversationPartnerId = null;
+					continue;
+				}
+
+				const partner = nextActors.find(
+					(entry) => entry.id === actor.conversationPartnerId,
+				);
+				if (!partner || partner.id === actor.id) {
+					actor.conversationPartnerId = null;
+					actor.conversationRemainingMs = 0;
+					actor.conversationCooldownRemainingMs = Math.max(
+						actor.conversationCooldownRemainingMs,
+						2800 + Math.random() * 2200,
+					);
+					continue;
+				}
+
+				const actorFeet = getAmbientFeetPosition(actor);
+				const partnerFeet = getAmbientFeetPosition(partner);
+				const distance = Math.hypot(
+					actorFeet.x - partnerFeet.x,
+					actorFeet.y - partnerFeet.y,
+				);
+
+				if (distance > 56 || actor.moving || partner.moving) {
+					actor.conversationPartnerId = null;
+					actor.conversationRemainingMs = 0;
+					actor.conversationCooldownRemainingMs = Math.max(
+						actor.conversationCooldownRemainingMs,
+						2800 + Math.random() * 2200,
+					);
+					continue;
+				}
+
+				actor.facing = getFacingFromVector(
+					partnerFeet.x - actorFeet.x,
+					partnerFeet.y - actorFeet.y,
+				);
+				actor.target = null;
+				actor.path = [];
+				actor.idleRemainingMs = Math.max(actor.idleRemainingMs, 240);
+				actor.emoteVisible = actor.emoteRemainingMs > 0;
+				actor.idleRemainingMs = Math.max(
+					actor.idleRemainingMs,
+					actor.emoteRemainingMs + getAmbientPostEmoteIdleMs(actor.id),
+				);
+			}
+
+			for (let index = 0; index < nextActors.length; index += 1) {
+				const actor = nextActors[index];
+				if (
+					!isConversationalAmbientActor(actor.id) ||
+					actor.moving ||
+					actor.target ||
+					actor.conversationRemainingMs > 0 ||
+					actor.conversationCooldownRemainingMs > 0 ||
+					actor.idleRemainingMs <= 200
+				) {
+					continue;
+				}
+
+				const actorFeet = getAmbientFeetPosition(actor);
+
+				for (let partnerIndex = index + 1; partnerIndex < nextActors.length; partnerIndex += 1) {
+					const partner = nextActors[partnerIndex];
+					if (
+						!isConversationalAmbientActor(partner.id) ||
+						partner.moving ||
+						partner.target ||
+						partner.conversationRemainingMs > 0 ||
+						partner.conversationCooldownRemainingMs > 0 ||
+						partner.idleRemainingMs <= 200
+					) {
+						continue;
+					}
+
+					const partnerFeet = getAmbientFeetPosition(partner);
+					const distance = Math.hypot(
+						actorFeet.x - partnerFeet.x,
+						actorFeet.y - partnerFeet.y,
+					);
+
+					if (distance < 18 || distance > 44) {
+						continue;
+					}
+
+					if (!hasClearTravelLine(actorFeet, partnerFeet)) {
+						continue;
+					}
+
+					if (Math.random() > 0.018) {
+						continue;
+					}
+
+					const duration = 2200 + Math.random() * 2600;
+					const actorEmoteDuration = getAmbientEmoteDurationMs(actor.id);
+					const partnerEmoteDuration = getAmbientEmoteDurationMs(partner.id);
+					const actorPostEmoteIdle = getAmbientPostEmoteIdleMs(actor.id);
+					const partnerPostEmoteIdle = getAmbientPostEmoteIdleMs(partner.id);
+
+					actor.conversationPartnerId = partner.id;
+					partner.conversationPartnerId = actor.id;
+					actor.conversationRemainingMs = duration;
+					partner.conversationRemainingMs = duration;
+					actor.conversationCooldownRemainingMs =
+						duration + actorEmoteDuration + actorPostEmoteIdle + 4200 + Math.random() * 2600;
+					partner.conversationCooldownRemainingMs =
+						duration + partnerEmoteDuration + partnerPostEmoteIdle + 4200 + Math.random() * 2600;
+					actor.idleRemainingMs =
+						duration + actorEmoteDuration + actorPostEmoteIdle;
+					partner.idleRemainingMs =
+						duration + partnerEmoteDuration + partnerPostEmoteIdle;
+					actor.facing = getFacingFromVector(
+						partnerFeet.x - actorFeet.x,
+						partnerFeet.y - actorFeet.y,
+					);
+					partner.facing = getFacingFromVector(
+						actorFeet.x - partnerFeet.x,
+						actorFeet.y - partnerFeet.y,
+					);
+					actor.target = null;
+					partner.target = null;
+					actor.path = [];
+					partner.path = [];
+					actor.moving = false;
+					partner.moving = false;
+					actor.emoteRemainingMs = actor.emote ? actorEmoteDuration : 0;
+					partner.emoteRemainingMs = partner.emote ? partnerEmoteDuration : 0;
+					actor.emoteAnimationMs = 0;
+					partner.emoteAnimationMs = 0;
+					actor.emoteVisible = actor.emoteRemainingMs > 0;
+					partner.emoteVisible = partner.emoteRemainingMs > 0;
+					break;
+				}
+			}
+
+			for (const actor of nextActors) {
+				if (
+					!isConversationalAmbientActor(actor.id) ||
+					actor.moving ||
+					actor.target ||
+					actor.conversationRemainingMs > 0 ||
+					actor.playerInteractionRemainingMs > 0 ||
+					actor.playerInteractionCooldownRemainingMs > 0 ||
+					actor.idleRemainingMs > 160
+				) {
+					continue;
+				}
+
+				const actorFeet = getAmbientFeetPosition(actor);
+				const playerDx = characterPosition.x - actorFeet.x;
+				const playerDy = characterPosition.y - actorFeet.y;
+				const playerDistance = Math.hypot(playerDx, playerDy);
+
+				if (playerDistance < 28 || playerDistance > 88) {
+					continue;
+				}
+
+				if (!hasClearTravelLine(actorFeet, characterPosition)) {
+					continue;
+				}
+
+				if (Math.random() > 0.012) {
+					continue;
+				}
+
+				const emoteDuration = actor.emote ? getAmbientEmoteDurationMs(actor.id) * 0.75 : 0;
+				const postIdle = getAmbientPostEmoteIdleMs(actor.id) * 0.75;
+				const interactionDuration = emoteDuration + postIdle;
+
+				actor.facing = getFacingFromVector(playerDx, playerDy);
+				actor.target = null;
+				actor.path = [];
+				actor.moving = false;
+				actor.conversationPartnerId = null;
+				actor.conversationRemainingMs = 0;
+				actor.playerInteractionRemainingMs = interactionDuration;
+				actor.playerInteractionCooldownRemainingMs =
+					interactionDuration + 4200 + Math.random() * 4200;
+				actor.emoteRemainingMs = emoteDuration;
+				actor.emoteAnimationMs = 0;
+				actor.emoteVisible = actor.emoteRemainingMs > 0;
+				actor.idleRemainingMs = Math.max(actor.idleRemainingMs, interactionDuration);
+			}
+
+			return nextActors;
+		});
+	});
+
+	useEffect(() => {
+		if (activeBackgroundId !== defaultTownMapBackgroundId) {
+			return;
+		}
+
+		let previousTimestamp: number | null = null;
+
+		const step = (timestamp: number) => {
+			if (previousTimestamp === null) {
+				previousTimestamp = timestamp;
+			} else {
+				onAmbientTick(Math.min(timestamp - previousTimestamp, 48));
+				previousTimestamp = timestamp;
+			}
+
+			ambientAnimationFrameRef.current = window.requestAnimationFrame(step);
+		};
+
+		ambientAnimationFrameRef.current = window.requestAnimationFrame(step);
+
+		return () => {
+			if (ambientAnimationFrameRef.current) {
+				window.cancelAnimationFrame(ambientAnimationFrameRef.current);
+				ambientAnimationFrameRef.current = null;
+			}
+		};
+	}, [activeBackgroundId]);
+
 	function handleEnterStop(stopId: StopId) {
 		if (travelingTo || activeStopId) {
 			return;
@@ -1257,6 +2016,14 @@ export function TownPortfolio({
 		editorEnabled && devInteractionMode !== "view"
 			? null
 			: travelingTo ?? activeStopId ?? focusStopId;
+	const trainerMoving = keyboardMoving || travelingTo !== null || pathMoving;
+	const trainerFrame = useMemo(() => {
+		if (!trainerMoving) {
+			return 0;
+		}
+
+		return spriteTick % 4;
+	}, [spriteTick, trainerMoving]);
 
 	const trainerTransform = useMemo(
 		() => `translate(${characterPosition.x - 16} ${characterPosition.y - 34})`,
@@ -1335,7 +2102,7 @@ export function TownPortfolio({
 			const deltaMs = Math.min(timestamp - lastTimestamp, 32);
 			movementTimestampRef.current = timestamp;
 			const deltaSeconds = deltaMs / 1000;
-			const speed = prefersReducedMotion ? 230 : 175;
+			const speed = prefersReducedMotion ? 260 : 205;
 			let horizontal = 0;
 			let vertical = 0;
 
@@ -1611,6 +2378,7 @@ export function TownPortfolio({
 								activeDraftPoints={activeDraftPoints}
 								activePolygonKind={activePolygonKind}
 								activeStopId={activeStopId}
+								ambientSprites={ambientActors}
 								characterVisible={characterVisible}
 								devDrafts={devDrafts}
 								devInteractionMode={devInteractionMode}
@@ -1631,8 +2399,11 @@ export function TownPortfolio({
 								showPointHandles={showPointHandles}
 								stops={baseStops}
 								svgRef={svgRef}
+								trainerFrame={trainerFrame}
+								trainerMoving={trainerMoving}
 								trainerTransform={trainerTransform}
 								visibleStopId={visibleStopId}
+								worldSpriteTick={spriteTick}
 							/>
 						</div>
 					</div>
