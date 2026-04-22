@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
-import { emoteAssets, mainCharacterAssets, npcAssets } from "@/lib/asset-catalog";
+import { emoteAssets, npcAssets } from "@/lib/asset-catalog";
 import type { Position, StopId, TownStop } from "@/lib/portfolio-content";
 import type {
 	DevInteractionMode,
@@ -58,12 +58,7 @@ function isRenderablePoint(point: Position) {
 const TRAINER_SPRITE_PATH = "/assets/characters/main/move.png";
 const TRAINER_SPRITE_RENDER_SIZE = 32;
 const TRAINER_SPRITE_CLIP_ID = "town-trainer-sprite-clip";
-const SPARKLE_EFFECT_PATH = "/assets/effects/sparkle.png";
-const STATIC_AMBIENT_SPRITE_IDS = new Set([
-	"bench-sitter",
-	"parked-bike",
-	"fountain-wave",
-]);
+const STATIC_AMBIENT_SPRITE_IDS = new Set<string>();
 
 export type FacingDirection = "up" | "down" | "left" | "right";
 
@@ -237,30 +232,6 @@ export const OVERWORLD_AMBIENT_SPRITES: AmbientSpriteDefinition[] = [
 		},
 	},
 	{
-		id: "snpc-1-fountain",
-		src: npcAssets[10].src,
-		x: 280,
-		y: 502,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 1,
-		shadow: true,
-		emote: {
-			src: emoteAssets[1].src,
-			x: 8,
-			y: -20,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-			animationOffset: 4,
-		},
-	},
-	{
 		id: "snpc-2-house",
 		src: npcAssets[11].src,
 		x: 672,
@@ -356,55 +327,6 @@ export const OVERWORLD_AMBIENT_SPRITES: AmbientSpriteDefinition[] = [
 		animationFrames: 2,
 		animationOffset: 1,
 		shadow: true,
-	},
-	{
-		id: "bench-sitter",
-		src: mainCharacterAssets[10].src,
-		x: 246,
-		y: 515,
-		columns: 1,
-		rows: 4,
-		renderWidth: 24,
-		renderHeight: 32,
-		row: 0,
-		shadow: true,
-	},
-	{
-		id: "parked-bike",
-		src: mainCharacterAssets[0].src,
-		x: 647,
-		y: 360,
-		columns: 1,
-		rows: 4,
-		renderWidth: 18,
-		renderHeight: 32,
-		row: 1,
-		shadow: true,
-	},
-	{
-		id: "fountain-wave",
-		src: mainCharacterAssets[14].src,
-		x: 276,
-		y: 696,
-		columns: 2,
-		rows: 1,
-		renderWidth: 32,
-		renderHeight: 16,
-		row: 0,
-		animateAxis: "column",
-		animationFrames: 2,
-		emote: {
-			src: SPARKLE_EFFECT_PATH,
-			x: 6,
-			y: -14,
-			columns: 1,
-			rows: 6,
-			renderWidth: 16,
-			renderHeight: 16,
-			animateAxis: "row",
-			animationFrames: 6,
-			animationOffset: 2,
-		},
 	},
 ];
 

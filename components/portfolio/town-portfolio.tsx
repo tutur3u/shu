@@ -172,6 +172,52 @@ function getCameraFrame({
 	return { scale, x, y };
 }
 
+function getDistanceToSegment(point: Position, start: Position, end: Position) {
+	const dx = end.x - start.x;
+	const dy = end.y - start.y;
+	const lengthSquared = dx * dx + dy * dy;
+
+	if (lengthSquared === 0) {
+		return Math.hypot(point.x - start.x, point.y - start.y);
+	}
+
+	const projection = clamp(
+		((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+		0,
+		1,
+	);
+	const projectedPoint = {
+		x: start.x + dx * projection,
+		y: start.y + dy * projection,
+	};
+
+	return Math.hypot(point.x - projectedPoint.x, point.y - projectedPoint.y);
+}
+
+function mergeTravelPaths(...segments: Position[][]) {
+	const merged: Position[] = [];
+
+	for (const segment of segments) {
+		if (segment.length === 0) {
+			continue;
+		}
+
+		if (merged.length === 0) {
+			merged.push(...segment);
+			continue;
+		}
+
+		const lastPoint = merged[merged.length - 1];
+		const [firstPoint, ...restPoints] = segment;
+		if (Math.hypot(firstPoint.x - lastPoint.x, firstPoint.y - lastPoint.y) > 0.01) {
+			merged.push(firstPoint);
+		}
+		merged.push(...restPoints);
+	}
+
+	return merged;
+}
+
 type AmbientActorState = AmbientSpriteActor & {
 	conversationCooldownRemainingMs: number;
 	conversationPartnerId: string | null;
@@ -183,11 +229,7 @@ type AmbientActorState = AmbientSpriteActor & {
 	playerInteractionRemainingMs: number;
 };
 
-const STATIC_AMBIENT_ACTOR_IDS = new Set([
-	"bench-sitter",
-	"parked-bike",
-	"fountain-wave",
-]);
+const STATIC_AMBIENT_ACTOR_IDS = new Set<string>();
 
 function getFacingFromRow(row = 0): FacingDirection {
 	if (row === 1) {
@@ -265,6 +307,10 @@ function getAmbientPostEmoteIdleMs(actorId: string) {
 	return 480 + Math.random() * 520;
 }
 
+function getCharacterTravelSpeed(prefersReducedMotion: boolean) {
+	return prefersReducedMotion ? 260 : 205;
+}
+
 function getAmbientFeetPosition(actor: Pick<AmbientActorState, "position" | "renderHeight" | "renderWidth">): Position {
 	return {
 		x: actor.position.x + actor.renderWidth / 2,
@@ -322,6 +368,8 @@ export function TownPortfolio({
 	content: PortfolioContent;
 	stops: TownStop[];
 }) {
+	const ambientSpriteSeed = OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id).join("|");
+	const ambientSpriteIds = new Set(OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id));
 	const editorEnabled = true;
 	const defaultMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
 	const [activeBackgroundId, setActiveBackgroundId] =
@@ -349,6 +397,7 @@ export function TownPortfolio({
 	const [characterVisible, setCharacterVisible] = useState(true);
 	const [skipTravel, setSkipTravel] = useState(false);
 	const [lastStopId, setLastStopId] = useState<StopId | null>(null);
+	const [exitPassThroughStopId, setExitPassThroughStopId] = useState<StopId | null>(null);
 	const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 	const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
 	const [keyboardMoving, setKeyboardMoving] = useState(false);
@@ -362,9 +411,8 @@ export function TownPortfolio({
 		createAmbientActors(defaultTownMapBackgroundId),
 	);
 	const [viewportSize, setViewportSize] = useState(() => ({
-		width: typeof window === "undefined" ? defaultMapVariant.width : window.innerWidth,
-		height:
-			typeof window === "undefined" ? defaultMapVariant.height : window.innerHeight,
+		width: defaultMapVariant.width,
+		height: defaultMapVariant.height,
 	}));
 	const activeMapVariant = useMemo(
 		() => getTownMapVariant(activeBackgroundId),
@@ -380,6 +428,27 @@ export function TownPortfolio({
 	const ambientAnimationFrameRef = useRef<number | null>(null);
 	const svgRef = useRef<SVGSVGElement | null>(null);
 	const viewportRef = useRef<HTMLDivElement | null>(null);
+	const clearTimer = useCallback(() => {
+		if (travelFrameRef.current) {
+			window.cancelAnimationFrame(travelFrameRef.current);
+			travelFrameRef.current = null;
+		}
+		setPathMoving(false);
+	}, []);
+	const stopMovementLoop = useCallback(() => {
+		if (movementFrameRef.current) {
+			window.cancelAnimationFrame(movementFrameRef.current);
+			movementFrameRef.current = null;
+		}
+		movementTimestampRef.current = null;
+		setKeyboardMoving(false);
+	}, []);
+	const cancelCurrentMovement = useCallback(() => {
+		clearTimer();
+		stopMovementLoop();
+		pressedKeysRef.current.clear();
+		setTravelingTo(null);
+	}, [clearTimer, stopMovementLoop]);
 	const availableBackgrounds = useMemo(
 		() =>
 			showLegacyBackground
@@ -429,24 +498,24 @@ export function TownPortfolio({
 				: "Town square";
 
 	useEffect(() => {
-		const savedLegacyBackgroundFlag = window.localStorage.getItem(
-			SHOW_LEGACY_BACKGROUND_STORAGE_KEY,
-		);
-		const legacyBackgroundEnabled = isLegacyBackgroundEnabled(
-			savedLegacyBackgroundFlag,
-		);
-		setShowLegacyBackground(legacyBackgroundEnabled);
+		const frame = window.requestAnimationFrame(() => {
+			const legacyBackgroundEnabled = isLegacyBackgroundEnabled(
+				window.localStorage.getItem(SHOW_LEGACY_BACKGROUND_STORAGE_KEY),
+			);
+			const savedBackground = window.localStorage.getItem(
+				ACTIVE_BACKGROUND_STORAGE_KEY,
+			);
 
-		const savedBackground = window.localStorage.getItem(
-			ACTIVE_BACKGROUND_STORAGE_KEY,
-		);
+			setShowLegacyBackground(legacyBackgroundEnabled);
+			if (
+				isTownMapBackgroundId(savedBackground) &&
+				(legacyBackgroundEnabled || savedBackground !== LEGACY_BACKGROUND_ID)
+			) {
+				setActiveBackgroundId(savedBackground);
+			}
+		});
 
-		if (
-			isTownMapBackgroundId(savedBackground) &&
-			(legacyBackgroundEnabled || savedBackground !== LEGACY_BACKGROUND_ID)
-		) {
-			setActiveBackgroundId(savedBackground);
-		}
+		return () => window.cancelAnimationFrame(frame);
 	}, []);
 
 	useEffect(() => {
@@ -456,25 +525,30 @@ export function TownPortfolio({
 		);
 
 		if (!showLegacyBackground && activeBackgroundId === LEGACY_BACKGROUND_ID) {
-			const nextMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
+			const frame = window.requestAnimationFrame(() => {
+				const nextMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
 
-			clearTimer();
-			stopMovementLoop();
-			pressedKeysRef.current.clear();
-			setDragTarget(null);
-			setHoveredStopId(null);
-			setActiveStopId(null);
-			setTravelingTo(null);
-			setLastStopId(null);
-			setCharacterVisible(true);
-			setProximitySuppressed(false);
-			setCharacterPosition(nextMapVariant.startPosition);
-			positionRef.current = nextMapVariant.startPosition;
-			setDevDrafts(createSeedDevDrafts(defaultTownMapBackgroundId));
-			setDraftsHydrated(false);
-			setActiveBackgroundId(defaultTownMapBackgroundId);
+				clearTimer();
+				stopMovementLoop();
+				pressedKeysRef.current.clear();
+				setDragTarget(null);
+				setHoveredStopId(null);
+				setActiveStopId(null);
+				setTravelingTo(null);
+				setLastStopId(null);
+				setExitPassThroughStopId(null);
+				setCharacterVisible(true);
+				setProximitySuppressed(false);
+				setCharacterPosition(nextMapVariant.startPosition);
+				positionRef.current = nextMapVariant.startPosition;
+				setDevDrafts(createSeedDevDrafts(defaultTownMapBackgroundId));
+				setDraftsHydrated(false);
+				setActiveBackgroundId(defaultTownMapBackgroundId);
+			});
+
+			return () => window.cancelAnimationFrame(frame);
 		}
-	}, [activeBackgroundId, showLegacyBackground]);
+	}, [activeBackgroundId, clearTimer, showLegacyBackground, stopMovementLoop]);
 
 	useEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
@@ -495,6 +569,7 @@ export function TownPortfolio({
 			setActiveStopId(null);
 			setTravelingTo(null);
 			setLastStopId(null);
+			setExitPassThroughStopId(null);
 			setCharacterVisible(true);
 			setProximitySuppressed(false);
 			setCharacterPosition(nextStartPosition);
@@ -529,7 +604,7 @@ export function TownPortfolio({
 		});
 
 		return () => window.cancelAnimationFrame(frame);
-	}, [activeBackgroundId, activeMapVariant.startPosition]);
+	}, [activeBackgroundId, activeMapVariant.startPosition, clearTimer, stopMovementLoop]);
 
 	useEffect(() => {
 		if (!draftsHydrated) {
@@ -550,7 +625,7 @@ export function TownPortfolio({
 		media.addEventListener("change", syncMotion);
 
 		return () => media.removeEventListener("change", syncMotion);
-	}, []);
+	}, [stopMovementLoop]);
 
 	useEffect(() => {
 		const interval = window.setInterval(() => {
@@ -561,8 +636,12 @@ export function TownPortfolio({
 	}, [prefersReducedMotion]);
 
 	useEffect(() => {
-		setAmbientActors(createAmbientActors(activeBackgroundId));
-	}, [activeBackgroundId]);
+		const frame = window.requestAnimationFrame(() => {
+			setAmbientActors(createAmbientActors(activeBackgroundId));
+		});
+
+		return () => window.cancelAnimationFrame(frame);
+	}, [activeBackgroundId, ambientSpriteSeed]);
 
 	useEffect(() => {
 		positionRef.current = characterPosition;
@@ -583,11 +662,16 @@ export function TownPortfolio({
 		};
 
 		syncViewport();
-		setCameraReady(true);
+		const frame = window.requestAnimationFrame(() => {
+			setCameraReady(true);
+		});
 		const observer = new ResizeObserver(syncViewport);
 		observer.observe(element);
 
-		return () => observer.disconnect();
+		return () => {
+			window.cancelAnimationFrame(frame);
+			observer.disconnect();
+		};
 	}, []);
 
 	useEffect(() => {
@@ -604,28 +688,15 @@ export function TownPortfolio({
 		};
 	}, []);
 
-	function clearTimer() {
-		if (travelFrameRef.current) {
-			window.cancelAnimationFrame(travelFrameRef.current);
-			travelFrameRef.current = null;
-		}
-		setPathMoving(false);
-	}
-
-	function stopMovementLoop() {
-		if (movementFrameRef.current) {
-			window.cancelAnimationFrame(movementFrameRef.current);
-			movementFrameRef.current = null;
-		}
-		movementTimestampRef.current = null;
-		setKeyboardMoving(false);
-	}
-
-	function runTravel(points: Position[], onDone: () => void) {
+	function runTravel(
+		points: Position[],
+		onDone: (completed: boolean) => void,
+		targetStopId?: StopId | null,
+	) {
 		clearTimer();
-		
-		if (points.length === 0) {
-			onDone();
+
+		if (points.length < 2) {
+			onDone(false);
 			return;
 		}
 
@@ -634,65 +705,100 @@ export function TownPortfolio({
 			setCharacterPosition(finalPoint);
 			positionRef.current = finalPoint;
 			setPathMoving(false);
-			onDone();
+			onDone(true);
 			return;
 		}
 
 		setPathMoving(true);
 
-		let currentPointIndex = 0;
-		let startedAt: number | null = null;
+		let currentPointIndex = 1;
+		let lastTimestamp: number | null = null;
 
 		const step = (timestamp: number) => {
-			if (startedAt === null) {
-				startedAt = timestamp;
-			}
-
-			const start = points[currentPointIndex];
-			const end = points[currentPointIndex + 1];
-
-			if (!end) {
+			if (currentPointIndex >= points.length) {
 				travelFrameRef.current = null;
 				setPathMoving(false);
-				onDone();
+				onDone(true);
 				return;
 			}
 
-			const distance = Math.hypot(end.x - start.x, end.y - start.y);
-			const duration = clamp(Math.round(distance * 2.2), 40, 1400);
-			
-			const progress = Math.min((timestamp - startedAt) / duration, 1);
-			const nextPosition = {
-				x: start.x + (end.x - start.x) * progress,
-				y: start.y + (end.y - start.y) * progress,
-			};
+			const previousTimestamp = lastTimestamp ?? timestamp;
+			const deltaMs = Math.min(timestamp - previousTimestamp, 32);
+			lastTimestamp = timestamp;
+			const deltaSeconds = deltaMs / 1000;
+			let remainingDistance =
+				getCharacterTravelSpeed(prefersReducedMotion) * deltaSeconds;
+			let currentPoint = positionRef.current;
+			let moved = false;
+			let safetyCounter = 0;
 
-			setCharacterPosition(nextPosition);
-			positionRef.current = nextPosition;
-			setProximitySuppressed(false);
+			while (remainingDistance > 0.001 && currentPointIndex < points.length) {
+				safetyCounter += 1;
+				if (safetyCounter > 8) {
+					break;
+				}
 
-			// Determine facing based on segment direction
-			const dx = end.x - start.x;
-			const dy = end.y - start.y;
-			if (Math.abs(dx) > Math.abs(dy)) {
-				setFacing(dx > 0 ? "right" : "left");
-			} else if (Math.abs(dy) > 0.1) {
-				setFacing(dy > 0 ? "down" : "up");
-			}
+				const targetPoint = points[currentPointIndex];
+				const dx = targetPoint.x - currentPoint.x;
+				const dy = targetPoint.y - currentPoint.y;
+				const distance = Math.hypot(dx, dy);
 
-			if (progress < 1) {
-				travelFrameRef.current = window.requestAnimationFrame(step);
-			} else {
-				currentPointIndex++;
-				if (currentPointIndex < points.length - 1) {
-					startedAt = timestamp;
-					travelFrameRef.current = window.requestAnimationFrame(step);
-				} else {
+				if (distance <= 0.001) {
+					currentPointIndex += 1;
+					continue;
+				}
+
+				if (Math.abs(dx) > Math.abs(dy)) {
+					setFacing(dx > 0 ? "right" : "left");
+				} else if (Math.abs(dy) > 0.1) {
+					setFacing(dy > 0 ? "down" : "up");
+				}
+
+				if (distance <= remainingDistance) {
+					currentPoint = targetPoint;
+					remainingDistance -= distance;
+					currentPointIndex += 1;
+					moved = true;
+					continue;
+				}
+
+				const stepX = (dx / distance) * remainingDistance;
+				const stepY = (dy / distance) * remainingDistance;
+				const nextPoint = resolveCharacterMovement(
+					currentPoint,
+					stepX,
+					stepY,
+					targetStopId,
+				);
+
+				if (nextPoint === currentPoint) {
 					travelFrameRef.current = null;
 					setPathMoving(false);
-					onDone();
+					onDone(false);
+					return;
 				}
+
+				currentPoint = nextPoint;
+				remainingDistance = 0;
+				moved = true;
 			}
+
+			if (moved) {
+				setCharacterPosition(currentPoint);
+				positionRef.current = currentPoint;
+				setCharacterVisible(true);
+				setLastStopId(null);
+				setProximitySuppressed(false);
+			}
+
+			if (currentPointIndex >= points.length) {
+				travelFrameRef.current = null;
+				setPathMoving(false);
+				onDone(true);
+				return;
+			}
+
+			travelFrameRef.current = window.requestAnimationFrame(step);
 		};
 
 		travelFrameRef.current = window.requestAnimationFrame(step);
@@ -753,6 +859,7 @@ export function TownPortfolio({
 		setActiveStopId(null);
 		setTravelingTo(null);
 		setLastStopId(null);
+		setExitPassThroughStopId(null);
 		setCharacterVisible(true);
 		setProximitySuppressed(false);
 		setCharacterPosition(nextMapVariant.startPosition);
@@ -1231,12 +1338,74 @@ export function TownPortfolio({
 		effectiveStops,
 	]);
 
-	const findPath = useCallback((start: Position, end: Position, targetStopId?: StopId | null): Position[] => {
+	const isWithinStopExitCorridor = useCallback((point: Position, stopId: StopId) => {
+		const stop = getStop(effectiveStops, stopId);
+
+		if (isUnsetPosition(stop.door) || isUnsetPosition(stop.exit)) {
+			return false;
+		}
+
+		const doorDistance = Math.hypot(point.x - stop.door.x, point.y - stop.door.y);
+		const exitDistance = Math.hypot(point.x - stop.exit.x, point.y - stop.exit.y);
+		const segmentDistance = getDistanceToSegment(point, stop.door, stop.exit);
+
+		return doorDistance <= 28 || exitDistance <= 32 || segmentDistance <= 24;
+	}, [effectiveStops]);
+
+	const isPlayerNavigablePoint = useCallback((point: Position, ignoreStopId?: StopId | null) => {
+		if (
+			exitPassThroughStopId &&
+			isWithinStopExitCorridor(point, exitPassThroughStopId)
+		) {
+			return true;
+		}
+
+		return isNavigablePoint(point, ignoreStopId);
+	}, [
+		exitPassThroughStopId,
+		isNavigablePoint,
+		isWithinStopExitCorridor,
+	]);
+
+	useEffect(() => {
+		if (
+			!exitPassThroughStopId ||
+			activeStopId ||
+			travelingTo
+		) {
+			return;
+		}
+
+		if (!isWithinStopExitCorridor(characterPosition, exitPassThroughStopId)) {
+			const frame = window.requestAnimationFrame(() => {
+				setExitPassThroughStopId(null);
+			});
+
+			return () => window.cancelAnimationFrame(frame);
+		}
+	}, [
+		activeStopId,
+		characterPosition,
+		exitPassThroughStopId,
+		isWithinStopExitCorridor,
+		travelingTo,
+	]);
+
+	const findPath = useCallback((
+		start: Position,
+		end: Position,
+		targetStopId?: StopId | null,
+		canNavigatePoint: (point: Position, ignoreStopId?: StopId | null) => boolean = isNavigablePoint,
+	): Position[] => {
 		const gridSize = 12; // More granular for better navigation
 		const startX = Math.floor(start.x / gridSize);
 		const startY = Math.floor(start.y / gridSize);
 		const endX = Math.floor(end.x / gridSize);
 		const endY = Math.floor(end.y / gridSize);
+
+		if (!canNavigatePoint(end, targetStopId)) {
+			return [];
+		}
 
 		if (startX === endX && startY === endY) {
 			return [start, end];
@@ -1279,7 +1448,7 @@ export function TownPortfolio({
 				if (visited.has(key)) continue;
 
 				const testPoint = { x: nx * gridSize + gridSize / 2, y: ny * gridSize + gridSize / 2 };
-				if (isNavigablePoint(testPoint, targetStopId)) {
+				if (canNavigatePoint(testPoint, targetStopId)) {
 					visited.add(key);
 					parentMap.set(key, [cx, cy]);
 					queue.push([nx, ny]);
@@ -1288,7 +1457,7 @@ export function TownPortfolio({
 		}
 
 		if (!reached) {
-			return [start, end];
+			return [];
 		}
 
 		// Reconstruct path
@@ -1304,7 +1473,7 @@ export function TownPortfolio({
 			}
 		}
 
-		if (!targetKey) return [start, end];
+		if (!targetKey) return [];
 
 		let currCoords: [number, number] = targetKey.split(',').map(Number) as [number, number];
 		while (parentMap.has(`${currCoords[0]},${currCoords[1]}`)) {
@@ -1320,10 +1489,26 @@ export function TownPortfolio({
 				const p1 = path[i];
 				const p2 = path[i + 2];
 				
-				const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-				if (isNavigablePoint(mid, targetStopId)) {
+				const segmentDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+				const samples = Math.max(1, Math.ceil(segmentDistance / 8));
+				let segmentClear = true;
+
+				for (let index = 1; index <= samples; index += 1) {
+					const progress = index / samples;
+					const samplePoint = {
+						x: p1.x + (p2.x - p1.x) * progress,
+						y: p1.y + (p2.y - p1.y) * progress,
+					};
+
+					if (!canNavigatePoint(samplePoint, targetStopId)) {
+						segmentClear = false;
+						break;
+					}
+				}
+
+				if (segmentClear) {
 					path.splice(i + 1, 1);
-					i--; 
+					i--;
 				}
 			}
 		}
@@ -1349,6 +1534,44 @@ export function TownPortfolio({
 
 		return true;
 	}, [isNavigablePoint]);
+
+	const resolveCharacterMovement = useCallback((
+		currentPoint: Position,
+		stepX: number,
+		stepY: number,
+		ignoreStopId?: StopId | null,
+	) => {
+		const fullCandidate = {
+			x: clamp(currentPoint.x + stepX, 0, activeMapVariant.width),
+			y: clamp(currentPoint.y + stepY, 0, activeMapVariant.height),
+		};
+
+		if (isPlayerNavigablePoint(fullCandidate, ignoreStopId)) {
+			return fullCandidate;
+		}
+
+		const horizontalCandidate = {
+			x: clamp(currentPoint.x + stepX, 0, activeMapVariant.width),
+			y: currentPoint.y,
+		};
+		if (isPlayerNavigablePoint(horizontalCandidate, ignoreStopId)) {
+			return horizontalCandidate;
+		}
+
+		const verticalCandidate = {
+			x: currentPoint.x,
+			y: clamp(currentPoint.y + stepY, 0, activeMapVariant.height),
+		};
+		if (isPlayerNavigablePoint(verticalCandidate, ignoreStopId)) {
+			return verticalCandidate;
+		}
+
+		return currentPoint;
+	}, [
+		activeMapVariant.height,
+		activeMapVariant.width,
+		isPlayerNavigablePoint,
+	]);
 
 	const findNearestAmbientFeet = useCallback((
 		actor: AmbientActorState,
@@ -1419,7 +1642,9 @@ export function TownPortfolio({
 		const deltaSeconds = deltaMs / 1000;
 
 		setAmbientActors((currentActors) => {
-			const nextActors = currentActors.map((actor) => {
+			const nextActors = currentActors
+				.filter((actor) => ambientSpriteIds.has(actor.id))
+				.map((actor) => {
 				const nextActor: AmbientActorState = {
 					...actor,
 					path: [...actor.path],
@@ -1916,28 +2141,51 @@ export function TownPortfolio({
 	}, [activeBackgroundId]);
 
 	function handleEnterStop(stopId: StopId) {
-		if (travelingTo || activeStopId) {
+		if (activeStopId) {
 			return;
 		}
 
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
+		cancelCurrentMovement();
 		setGuideOpen(false);
 		const stop = getStop(effectiveStops, stopId);
 		if (stop.outline.length < 3 || isUnsetPosition(stop.door)) {
 			return;
 		}
+		setExitPassThroughStopId(null);
 		setTravelingTo(stopId);
 		setCharacterVisible(true);
 
-		const path = findPath(positionRef.current, stop.door, stopId);
+		const path = isUnsetPosition(stop.exit)
+			? findPath(
+					positionRef.current,
+					stop.door,
+					stopId,
+					isPlayerNavigablePoint,
+				)
+			: mergeTravelPaths(
+					findPath(
+						positionRef.current,
+						stop.exit,
+						null,
+						isPlayerNavigablePoint,
+					),
+					findPath(
+						stop.exit,
+						stop.door,
+						stopId,
+						isPlayerNavigablePoint,
+					),
+				);
 
-		runTravel(path, () => {
+		runTravel(path, (completed) => {
 			setTravelingTo(null);
+			if (!completed) {
+				return;
+			}
 			setActiveStopId(stopId);
 			setLastStopId(stopId);
 			setCharacterVisible(false);
-		});
+		}, stopId);
 	}
 
 	function handleCloseStop() {
@@ -1945,8 +2193,7 @@ export function TownPortfolio({
 			return;
 		}
 
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
+		cancelCurrentMovement();
 		const stop = getStop(effectiveStops, activeStopId);
 		if (isUnsetPosition(stop.door) || isUnsetPosition(stop.exit)) {
 			setActiveStopId(null);
@@ -1957,12 +2204,21 @@ export function TownPortfolio({
 		setTravelingTo(stop.id);
 		setCharacterVisible(true);
 
-		const path = findPath(stop.door, stop.exit);
+		const path = findPath(
+			stop.door,
+			stop.exit,
+			stop.id,
+			isPlayerNavigablePoint,
+		);
 
-		runTravel(path, () => {
+		runTravel(path, (completed) => {
 			setTravelingTo(null);
+			if (!completed) {
+				return;
+			}
+			setExitPassThroughStopId(stop.id);
 			setLastStopId(stop.id);
-		});
+		}, stop.id);
 	}
 
 	function handleSurfaceClick(event: ReactMouseEvent<SVGSVGElement>) {
@@ -1985,20 +2241,24 @@ export function TownPortfolio({
 			return;
 		}
 
-		if (activeStopId || travelingTo) {
+		if (activeStopId) {
 			return;
 		}
 
-		if (!isNavigablePoint(nextPoint)) {
+		if (!isPlayerNavigablePoint(nextPoint)) {
 			return;
 		}
 
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
+		cancelCurrentMovement();
 		setGuideOpen(false);
 		setCharacterVisible(true);
 
-		const path = findPath(positionRef.current, nextPoint);
+		const path = findPath(
+			positionRef.current,
+			nextPoint,
+			null,
+			isPlayerNavigablePoint,
+		);
 
 		runTravel(path, () => {
 			setLastStopId(null);
@@ -2053,11 +2313,13 @@ export function TownPortfolio({
 	);
 
 	const onEscapeClose = useEffectEvent(() => {
-		stopMovementLoop();
-		pressedKeysRef.current.clear();
-
 		if (activeStopId) {
 			handleCloseStop();
+			return;
+		}
+
+		if (travelingTo || pathMoving || keyboardMoving) {
+			cancelCurrentMovement();
 			return;
 		}
 
@@ -2102,7 +2364,7 @@ export function TownPortfolio({
 			const deltaMs = Math.min(timestamp - lastTimestamp, 32);
 			movementTimestampRef.current = timestamp;
 			const deltaSeconds = deltaMs / 1000;
-			const speed = prefersReducedMotion ? 260 : 205;
+			const speed = getCharacterTravelSpeed(prefersReducedMotion);
 			let horizontal = 0;
 			let vertical = 0;
 
@@ -2135,30 +2397,11 @@ export function TownPortfolio({
 			const magnitude = Math.hypot(horizontal, vertical) || 1;
 			const stepX = (horizontal / magnitude) * speed * deltaSeconds;
 			const stepY = (vertical / magnitude) * speed * deltaSeconds;
-			const fullCandidate = {
-				x: clamp(positionRef.current.x + stepX, 0, activeMapVariant.width),
-				y: clamp(positionRef.current.y + stepY, 0, activeMapVariant.height),
-			};
-			let nextPoint = positionRef.current;
-
-			if (isNavigablePoint(fullCandidate)) {
-				nextPoint = fullCandidate;
-			} else {
-				const horizontalCandidate = {
-					x: clamp(positionRef.current.x + stepX, 0, activeMapVariant.width),
-					y: positionRef.current.y,
-				};
-				const verticalCandidate = {
-					x: positionRef.current.x,
-					y: clamp(positionRef.current.y + stepY, 0, activeMapVariant.height),
-				};
-
-				if (isNavigablePoint(horizontalCandidate)) {
-					nextPoint = horizontalCandidate;
-				} else if (isNavigablePoint(verticalCandidate)) {
-					nextPoint = verticalCandidate;
-				}
-			}
+			const nextPoint = resolveCharacterMovement(
+				positionRef.current,
+				stepX,
+				stepY,
+			);
 
 			if (nextPoint !== positionRef.current) {
 				setCharacterVisible(true);
@@ -2182,6 +2425,8 @@ export function TownPortfolio({
 		guideOpen,
 		isNavigablePoint,
 		prefersReducedMotion,
+		resolveCharacterMovement,
+		stopMovementLoop,
 		travelingTo,
 	]);
 
@@ -2203,6 +2448,17 @@ export function TownPortfolio({
 			return;
 		}
 
+		const key = event.key.toLowerCase();
+		const isMovementKey =
+			key === "w" ||
+			key === "arrowup" ||
+			key === "s" ||
+			key === "arrowdown" ||
+			key === "a" ||
+			key === "arrowleft" ||
+			key === "d" ||
+			key === "arrowright";
+
 		const activeElement = document.activeElement as HTMLElement | null;
 		const isTypingTarget =
 			activeElement?.tagName === "INPUT" ||
@@ -2215,12 +2471,18 @@ export function TownPortfolio({
 			devToolOpen ||
 			guideOpen ||
 			activeStopId ||
-			travelingTo ||
 			(editorEnabled && devInteractionMode !== "view")
 		) {
 			return;
 		}
-		const key = event.key.toLowerCase();
+
+		if (isMovementKey && (travelingTo || pathMoving)) {
+			cancelCurrentMovement();
+		}
+
+		if (travelingTo) {
+			return;
+		}
 
 		switch (key) {
 			case "w":
@@ -2232,6 +2494,15 @@ export function TownPortfolio({
 			case "d":
 			case "arrowright":
 				event.preventDefault();
+				setFacing(
+					key === "a" || key === "arrowleft"
+						? "left"
+						: key === "d" || key === "arrowright"
+							? "right"
+							: key === "w" || key === "arrowup"
+								? "up"
+								: "down",
+				);
 				pressedKeysRef.current.add(key);
 				startMovementLoop();
 				return;
@@ -2280,7 +2551,7 @@ export function TownPortfolio({
 			window.removeEventListener("keyup", handleKeyUp);
 			window.removeEventListener("blur", handleBlur);
 		};
-	}, []);
+	}, [stopMovementLoop]);
 
 	return (
 		<div className="relative min-h-screen overflow-hidden">
