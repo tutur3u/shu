@@ -1,7 +1,6 @@
 "use client";
 
-import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
-import { emoteAssets, npcAssets } from "@/lib/asset-catalog";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import type { Position, StopId, TownStop } from "@/lib/portfolio-content";
 import type {
 	DevInteractionMode,
@@ -10,438 +9,35 @@ import type {
 	DevPolygonKind,
 	DevToolMode,
 } from "./map-dev-tool";
+import {
+	DOOR_FRAME_SEQUENCE,
+	DOOR_RENDER_HEIGHT,
+	DOOR_RENDER_WIDTH,
+	DOOR_SPRITE_ROW_COUNT,
+	DOOR_SPRITE_PATH,
+	getAmbientIdleFrame,
+	getAmbientWalkFrames,
+	getAnimatedCell,
+	getEffectWaterRect,
+	getOverlayOutlineBounds,
+	getOneShotRowCell,
+	getTooltipFrame,
+	getTrainerSpriteRow,
+	isRenderablePoint,
+	TRAINER_SPRITE_CLIP_ID,
+	TRAINER_SPRITE_PATH,
+	TRAINER_SPRITE_RENDER_SIZE,
+	WATER_SPRITE_PATH,
+	WATER_TILE_COLUMNS,
+	WATER_TILE_ROWS,
+} from "./town-map-overlay-helpers";
+import type {
+	AmbientSpriteActor,
+} from "./town-map-overlay-types";
 import type { DragTarget } from "./town-map-utils";
-import { clamp, isPolygonMode, pointsToPolygon } from "./town-map-utils";
+import { isPolygonMode, pointsToPolygon } from "./town-map-utils";
 
-function getTooltipFrame(
-	outlineBounds: { x: number; y: number; width: number; height: number },
-	label: string,
-	mapHeight: number,
-	mapWidth: number,
-	showKeyboardHint: boolean,
-) {
-	const width = clamp(Math.round(label.length * 11.2 + 22), 88, 240);
-	const height = 34;
-	const hintAllowance = showKeyboardHint ? 18 : 0;
-	const centerX = outlineBounds.x + outlineBounds.width / 2;
-	const x = clamp(centerX - width / 2, 10, mapWidth - width - 10);
-	const y = clamp(
-		outlineBounds.y + 12,
-		10,
-		mapHeight - height - hintAllowance - 10,
-	);
-
-	return { x, y, width, height };
-}
-
-function getOutlineBounds(points: Position[]) {
-	const xs = points.map((point) => point.x);
-	const ys = points.map((point) => point.y);
-	const minX = Math.min(...xs);
-	const maxX = Math.max(...xs);
-	const minY = Math.min(...ys);
-	const maxY = Math.max(...ys);
-	const padding = 8;
-
-	return {
-		x: minX - padding,
-		y: minY - padding,
-		width: maxX - minX + padding * 2,
-		height: maxY - minY + padding * 2,
-	};
-}
-
-function isRenderablePoint(point: Position) {
-	return point.x >= 0 && point.y >= 0;
-}
-
-const TRAINER_SPRITE_PATH = "/assets/characters/main/move.png";
-const TRAINER_SPRITE_RENDER_SIZE = 32;
-const TRAINER_SPRITE_CLIP_ID = "town-trainer-sprite-clip";
 const STATIC_AMBIENT_SPRITE_IDS = new Set<string>();
-
-export type FacingDirection = "up" | "down" | "left" | "right";
-
-export type AmbientSpriteDefinition = {
-	id: string;
-	src: string;
-	x: number;
-	y: number;
-	columns: number;
-	rows: number;
-	renderWidth: number;
-	renderHeight: number;
-	row?: number;
-	column?: number;
-	animateAxis?: "column" | "row";
-	animationFrames?: number;
-	animationOffset?: number;
-	defaultEmoteVisible?: boolean;
-	shadow?: boolean;
-	emote?: {
-		src: string;
-		x: number;
-		y: number;
-		columns: number;
-		rows: number;
-		renderWidth: number;
-		renderHeight: number;
-		animateAxis?: "column" | "row";
-		animationFrames?: number;
-		animationOffset?: number;
-	};
-};
-
-export type AmbientSpriteActor = AmbientSpriteDefinition & {
-	emoteAnimationMs: number;
-	emoteVisible: boolean;
-	facing: FacingDirection;
-	idleRemainingMs: number;
-	moving: boolean;
-	position: Position;
-	spawn: Position;
-	speed: number;
-	target: Position | null;
-};
-
-export const OVERWORLD_AMBIENT_SPRITES: AmbientSpriteDefinition[] = [
-	{
-		id: "npc-1-north",
-		src: npcAssets[5].src,
-		x: 462,
-		y: 334,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 0,
-		animateAxis: "column",
-		animationFrames: 4,
-		shadow: true,
-		emote: {
-			src: emoteAssets[8].src,
-			x: 7,
-			y: -20,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-		},
-	},
-	{
-		id: "npc-2-north",
-		src: npcAssets[6].src,
-		x: 500,
-		y: 336,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 1,
-		animateAxis: "column",
-		animationFrames: 4,
-		animationOffset: 1,
-		shadow: true,
-		emote: {
-			src: emoteAssets[11].src,
-			x: 8,
-			y: -19,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-			animationOffset: 1,
-		},
-	},
-	{
-		id: "npc-3-center",
-		src: npcAssets[7].src,
-		x: 552,
-		y: 334,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 0,
-		shadow: true,
-		emote: {
-			src: emoteAssets[9].src,
-			x: 8,
-			y: -18,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-			animationOffset: 2,
-		},
-	},
-	{
-		id: "npc-4-right",
-		src: npcAssets[8].src,
-		x: 594,
-		y: 338,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 3,
-		shadow: true,
-		emote: {
-			src: emoteAssets[13].src,
-			x: 7,
-			y: -19,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-			animationOffset: 3,
-		},
-	},
-	{
-		id: "npc-5-fountain",
-		src: npcAssets[9].src,
-		x: 160,
-		y: 512,
-		columns: 4,
-		rows: 4,
-		renderWidth: 32,
-		renderHeight: 32,
-		row: 3,
-		animateAxis: "column",
-		animationFrames: 4,
-		animationOffset: 2,
-		shadow: true,
-		emote: {
-			src: emoteAssets[12].src,
-			x: 7,
-			y: -20,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-		},
-	},
-	{
-		id: "snpc-2-house",
-		src: npcAssets[11].src,
-		x: 672,
-		y: 349,
-		columns: 3,
-		rows: 4,
-		renderWidth: 24,
-		renderHeight: 32,
-		row: 0,
-		animateAxis: "column",
-		animationFrames: 3,
-		animationOffset: 1,
-		shadow: true,
-		emote: {
-			src: emoteAssets[3].src,
-			x: 3,
-			y: -20,
-			columns: 1,
-			rows: 5,
-			renderWidth: 18,
-			renderHeight: 18,
-			animateAxis: "row",
-			animationFrames: 5,
-			animationOffset: 2,
-		},
-	},
-	{
-		id: "creature-1-construction",
-		src: npcAssets[0].src,
-		x: 760,
-		y: 620,
-		columns: 2,
-		rows: 4,
-		renderWidth: 26,
-		renderHeight: 32,
-		row: 1,
-		animateAxis: "column",
-		animationFrames: 2,
-		shadow: true,
-	},
-	{
-		id: "creature-2-fountain",
-		src: npcAssets[1].src,
-		x: 242,
-		y: 689,
-		columns: 2,
-		rows: 4,
-		renderWidth: 26,
-		renderHeight: 32,
-		row: 0,
-		animateAxis: "column",
-		animationFrames: 2,
-		animationOffset: 1,
-		shadow: true,
-	},
-	{
-		id: "creature-3-garden",
-		src: npcAssets[2].src,
-		x: 854,
-		y: 803,
-		columns: 2,
-		rows: 4,
-		renderWidth: 26,
-		renderHeight: 32,
-		row: 3,
-		shadow: true,
-	},
-	{
-		id: "creature-4-route",
-		src: npcAssets[3].src,
-		x: 666,
-		y: 767,
-		columns: 2,
-		rows: 4,
-		renderWidth: 26,
-		renderHeight: 32,
-		row: 1,
-		animateAxis: "column",
-		animationFrames: 2,
-		shadow: true,
-	},
-	{
-		id: "creature-5-south",
-		src: npcAssets[4].src,
-		x: 421,
-		y: 841,
-		columns: 2,
-		rows: 4,
-		renderWidth: 26,
-		renderHeight: 32,
-		row: 0,
-		animateAxis: "column",
-		animationFrames: 2,
-		animationOffset: 1,
-		shadow: true,
-	},
-];
-
-function getTrainerSpriteRow(facing: FacingDirection) {
-	if (facing === "down") {
-		return 0;
-	}
-
-	if (facing === "left") {
-		return 1;
-	}
-
-	if (facing === "up") {
-		return 2;
-	}
-
-	return 3;
-}
-
-function getAnimatedCell({
-	animateAxis,
-	animationFrames,
-	animationOffset = 0,
-	baseColumn = 0,
-	baseRow = 0,
-	spriteTick,
-}: {
-	animateAxis?: "column" | "row";
-	animationFrames?: number;
-	animationOffset?: number;
-	baseColumn?: number;
-	baseRow?: number;
-	spriteTick: number;
-}) {
-	if (!animateAxis || !animationFrames || animationFrames < 2) {
-		return {
-			column: baseColumn,
-			row: baseRow,
-		};
-	}
-
-	if (animateAxis === "row") {
-		const peakFrame =
-			animationFrames >= 4
-				? animationFrames - 2
-				: Math.floor((animationFrames - 1) / 2);
-		const settleFrame = Math.min(animationFrames - 1, peakFrame + 1);
-		const rowSequence = [
-			...Array.from({ length: peakFrame + 1 }, (_, index) => index),
-			...Array.from({ length: 4 }, () => peakFrame),
-			...Array.from(
-				{ length: settleFrame > peakFrame ? 2 : 0 },
-				() => settleFrame,
-			),
-		];
-		const animatedFrame =
-			rowSequence[(spriteTick + animationOffset) % rowSequence.length] ?? peakFrame;
-
-		return {
-			column: baseColumn,
-			row: animatedFrame,
-		};
-	}
-
-	const animatedFrame = (spriteTick + animationOffset) % animationFrames;
-
-	return {
-		column: animatedFrame,
-		row: baseRow,
-	};
-}
-
-function getOneShotRowCell({
-	animationFrames,
-	baseColumn = 0,
-	baseRow = 0,
-	progressMs,
-}: {
-	animationFrames?: number;
-	baseColumn?: number;
-	baseRow?: number;
-	progressMs: number;
-}) {
-	if (!animationFrames || animationFrames < 2) {
-		return {
-			column: baseColumn,
-			row: baseRow,
-		};
-	}
-
-	const peakFrame =
-		animationFrames >= 4
-			? animationFrames - 2
-			: Math.floor((animationFrames - 1) / 2);
-	const settleFrame = Math.min(animationFrames - 1, peakFrame + 1);
-	const rowSequence = [
-		...Array.from({ length: peakFrame + 1 }, (_, index) => index),
-		...Array.from({ length: 4 }, () => peakFrame),
-		...Array.from(
-			{ length: settleFrame > peakFrame ? 2 : 0 },
-			() => settleFrame,
-		),
-	];
-	const frameDurationMs = 120;
-	const sequenceIndex = Math.min(
-		Math.floor(progressMs / frameDurationMs),
-		rowSequence.length - 1,
-	);
-	const animatedFrame = rowSequence[sequenceIndex] ?? peakFrame;
-
-	return {
-		column: baseColumn,
-		row: animatedFrame,
-	};
-}
 
 export function TownMapOverlay({
 	activeDraftPoints,
@@ -521,6 +117,53 @@ export function TownMapOverlay({
 		(first, second) =>
 			first.position.y + first.renderHeight - (second.position.y + second.renderHeight),
 	);
+	const waterRect = getEffectWaterRect(devDrafts.effects.waterArea);
+	const waterTileColumnCount = waterRect
+		? Math.max(1, Math.ceil(waterRect.width / 60))
+		: 0;
+	const waterTileRowCount = waterRect
+		? Math.max(1, Math.ceil(waterRect.height / 57))
+		: 0;
+	const [doorFrames, setDoorFrames] = useState<Partial<Record<StopId, number>>>({});
+	const activeDoorIds = useMemo(() => {
+		const next = new Set<StopId>();
+
+		if (activeStopId) {
+			next.add(activeStopId);
+		}
+
+		if (showStopTooltip && visibleStopId) {
+			next.add(visibleStopId);
+		}
+
+		return next;
+	}, [activeStopId, showStopTooltip, visibleStopId]);
+
+	useEffect(() => {
+		const intervalId = window.setInterval(() => {
+			setDoorFrames((current) => {
+				let changed = false;
+				const next: Partial<Record<StopId, number>> = { ...current };
+
+				for (const stop of stops) {
+					const isOpenTarget = activeDoorIds.has(stop.id);
+					const frame = next[stop.id] ?? 0;
+					const targetFrame = isOpenTarget ? DOOR_FRAME_SEQUENCE.length - 1 : 0;
+
+					if (frame === targetFrame) {
+						continue;
+					}
+
+					next[stop.id] = frame + (isOpenTarget ? 1 : -1);
+					changed = true;
+				}
+
+				return changed ? next : current;
+			});
+		}, 85);
+
+		return () => window.clearInterval(intervalId);
+	}, [activeDoorIds, stops]);
 
 	return (
 		<svg
@@ -566,6 +209,42 @@ export function TownMapOverlay({
 							/>
 						</clipPath>
 					))}
+				{stops.map((stop) => {
+					const draftStop = devDrafts.stops[stop.id];
+					const door = draftStop?.door ?? stop.door;
+					const doorFxDraft = devDrafts.effects.doorFx[stop.id];
+					const doorFxAnchor = doorFxDraft?.anchor ?? door;
+					const doorFxScale = doorFxDraft?.scale ?? 1;
+					const doorRenderWidth = DOOR_RENDER_WIDTH * doorFxScale;
+					const doorRenderHeight = DOOR_RENDER_HEIGHT * doorFxScale;
+
+					if (!isRenderablePoint(doorFxAnchor) || doorFxDraft?.hidden) {
+						return null;
+					}
+
+					return (
+						<clipPath id={`door-${stop.id}-clip`} key={`door-${stop.id}-clip`}>
+							<rect
+								x={doorFxAnchor.x - doorRenderWidth / 2}
+								y={doorFxAnchor.y - doorRenderHeight + 3}
+								width={doorRenderWidth}
+								height={doorRenderHeight}
+							/>
+						</clipPath>
+					);
+				})}
+				{waterRect ? (
+					<clipPath id="fountain-water-clip">
+						<rect
+							x={waterRect.x}
+							y={waterRect.y}
+							width={waterRect.width}
+							height={waterRect.height}
+							rx="6"
+							ry="6"
+						/>
+					</clipPath>
+				) : null}
 			</defs>
 
 			{isDev ? (
@@ -662,18 +341,25 @@ export function TownMapOverlay({
 				<g className="ambient-sprite-layer" pointerEvents="none" aria-hidden="true">
 					{sortedAmbientSprites.map((sprite) => {
 						const spriteIsStatic = STATIC_AMBIENT_SPRITE_IDS.has(sprite.id);
-						const spriteCell = getAnimatedCell({
-							animateAxis:
-								spriteIsStatic || sprite.moving ? sprite.animateAxis : undefined,
-							animationFrames:
-								spriteIsStatic || sprite.moving ? sprite.animationFrames : undefined,
-							animationOffset: sprite.animationOffset,
-							baseColumn: sprite.column,
-							baseRow: spriteIsStatic
-								? (sprite.row ?? 0)
-								: getTrainerSpriteRow(sprite.facing),
-							spriteTick: worldSpriteTick,
-						});
+						const spriteShouldWalkAnimate =
+							spriteIsStatic || (sprite.moving && !sprite.emoteVisible);
+						const spriteRow = spriteIsStatic
+							? (sprite.row ?? 0)
+							: getTrainerSpriteRow(sprite.facing);
+						const idleFrame = getAmbientIdleFrame(sprite.idleFrame, sprite.idleColumn);
+						const walkFrames = getAmbientWalkFrames(
+							sprite.columns,
+							sprite.walkFrames,
+							sprite.idleFrame,
+							sprite.idleColumn,
+						);
+						const walkFrame =
+							walkFrames[Math.floor(worldSpriteTick / 2) % walkFrames.length] ??
+							idleFrame;
+						const spriteCell = {
+							column: spriteShouldWalkAnimate ? walkFrame : idleFrame,
+							row: spriteRow,
+						};
 						const emoteCell = sprite.emote
 							? sprite.emote.animateAxis === "row"
 								? getOneShotRowCell({
@@ -743,20 +429,61 @@ export function TownMapOverlay({
 				</g>
 			) : null}
 
+			{waterRect ? (
+				<g className="tile-fx-layer" pointerEvents="none" aria-hidden="true">
+					{Array.from(
+						{ length: waterTileColumnCount * waterTileRowCount },
+						(_, tileIndex) => {
+							const frameRow =
+								(Math.floor(worldSpriteTick / 2) + tileIndex * 3) % WATER_TILE_ROWS;
+							const frameColumn = tileIndex % WATER_TILE_COLUMNS;
+							const tileX =
+								waterRect.x + (tileIndex % waterTileColumnCount) * 60;
+							const tileY =
+								waterRect.y + Math.floor(tileIndex / waterTileColumnCount) * 57;
+
+							return (
+								<g clipPath="url(#fountain-water-clip)" key={`water-${tileIndex}`}>
+									<image
+										className="ambient-sprite__effect"
+										href={WATER_SPRITE_PATH}
+										x={tileX - frameColumn * 60}
+										y={tileY - frameRow * 57}
+										width={WATER_TILE_COLUMNS * 60}
+										height={WATER_TILE_ROWS * 57}
+										opacity="0.68"
+										preserveAspectRatio="none"
+									/>
+								</g>
+							);
+						},
+					)}
+				</g>
+			) : null}
+
 			{stops.map((stop) => {
 				const draftStop = devDrafts.stops[stop.id];
 				const outline = draftStop?.outline?.length ? draftStop.outline : stop.outline;
 				const door = draftStop?.door ?? stop.door;
+				const doorFxDraft = devDrafts.effects.doorFx[stop.id];
+				const doorFxAnchor = doorFxDraft?.anchor ?? door;
+				const doorFxHidden = doorFxDraft?.hidden ?? false;
+				const doorFxScale = doorFxDraft?.scale ?? 1;
+				const doorRenderWidth = DOOR_RENDER_WIDTH * doorFxScale;
+				const doorRenderHeight = DOOR_RENDER_HEIGHT * doorFxScale;
 				const exit = draftStop?.exit ?? stop.exit;
 				const infoAnchor = draftStop?.infoAnchor ?? stop.infoAnchor;
 				const hasOutline = outline.length >= 3;
 				const hasInfoAnchor = isRenderablePoint(infoAnchor);
 				const hasDoor = isRenderablePoint(door);
+				const hasDoorFxAnchor = isRenderablePoint(doorFxAnchor);
+				const hasDoorFx = hasDoorFxAnchor && !doorFxHidden;
 				const hasExit = isRenderablePoint(exit);
 				const isVisible = showStopTooltip && visibleStopId === stop.id;
 				const isActive = activeStopId === stop.id;
 				const isSelectedEditorStop =
 					devMode !== "all" &&
+					devMode !== "effect-water" &&
 					!isPolygonMode(devMode) &&
 					stop.id === devSelectedStopId;
 				const showSelectedStopOutline =
@@ -775,19 +502,24 @@ export function TownMapOverlay({
 						hasOutline) ||
 						(effectiveLayerVisibility.stopAnchors &&
 							!showCaptureOnly &&
-							(hasInfoAnchor || hasDoor || hasExit)));
+							((devMode === "stop-info" && hasInfoAnchor) ||
+								(devMode === "stop-door" && hasDoor) ||
+								(devMode === "stop-exit" && hasExit) ||
+								(devMode === "effect-door" && hasDoorFx))));
 
 				if (!hasOutline && !hasVisibleEditorLayer) {
 					return null;
 				}
 
-				const outlineBounds = hasOutline ? getOutlineBounds(outline) : null;
+				const outlineBounds = hasOutline ? getOverlayOutlineBounds(outline) : null;
 				const polygon = hasOutline ? pointsToPolygon(outline) : "";
 				const outlineStroke =
 					isVisible || isActive
 						? "#ffffff"
 						: "rgba(255, 255, 255, 0.4)";
 				const outlineWidth = isVisible || isActive ? 4 : 2;
+				const doorFrame = doorFrames[stop.id] ?? 0;
+				const doorSourceRow = DOOR_FRAME_SEQUENCE[doorFrame] ?? DOOR_FRAME_SEQUENCE[0];
 
 				return (
 					<g
@@ -805,6 +537,21 @@ export function TownMapOverlay({
 							onEnterStop(stop.id);
 						}}
 					>
+						{hasDoorFx ? (
+							<g className="door-fx" pointerEvents="none">
+								<g clipPath={`url(#door-${stop.id}-clip)`}>
+									<image
+										href={DOOR_SPRITE_PATH}
+										x={doorFxAnchor.x - doorRenderWidth / 2}
+										y={doorFxAnchor.y - doorRenderHeight + 3 - doorSourceRow * doorRenderHeight}
+										width={doorRenderWidth}
+										height={doorRenderHeight * DOOR_SPRITE_ROW_COUNT}
+										opacity={isVisible || isActive ? 1 : 0.9}
+										preserveAspectRatio="none"
+									/>
+								</g>
+							</g>
+						) : null}
 						{hasOutline ? (
 							<>
 								<polygon 
@@ -862,7 +609,7 @@ export function TownMapOverlay({
 									: null}
 								{effectiveLayerVisibility.stopAnchors && !showCaptureOnly ? (
 									<>
-										{isRenderablePoint(infoAnchor) ? (
+										{devMode === "stop-info" && isRenderablePoint(infoAnchor) ? (
 											<g
 												className={`dev-anchor dev-anchor--info ${
 													devInteractionMode === "move" ? "is-draggable" : ""
@@ -884,7 +631,7 @@ export function TownMapOverlay({
 												<text x="10" y="4">i</text>
 											</g>
 										) : null}
-										{isRenderablePoint(door) ? (
+										{devMode === "stop-door" && isRenderablePoint(door) ? (
 											<g
 												className={`dev-anchor dev-anchor--door ${
 													devInteractionMode === "move" ? "is-draggable" : ""
@@ -906,7 +653,7 @@ export function TownMapOverlay({
 												<text x="10" y="4">D</text>
 											</g>
 										) : null}
-										{isRenderablePoint(exit) ? (
+										{devMode === "stop-exit" && isRenderablePoint(exit) ? (
 											<g
 												className={`dev-anchor dev-anchor--exit ${
 													devInteractionMode === "move" ? "is-draggable" : ""
@@ -928,6 +675,27 @@ export function TownMapOverlay({
 												<text x="10" y="4">E</text>
 											</g>
 										) : null}
+										{devMode === "effect-door" && hasDoorFxAnchor ? (
+											<g
+												className={`dev-anchor dev-anchor--door ${
+													devInteractionMode === "move" ? "is-draggable" : ""
+												}`}
+												transform={`translate(${doorFxAnchor.x} ${doorFxAnchor.y})`}
+												onPointerDown={(event) => {
+													if (devInteractionMode !== "move") {
+														return;
+													}
+													event.stopPropagation();
+													onDragTargetChange({
+														type: "effect-door-anchor",
+														stopId: stop.id,
+													});
+												}}
+											>
+												<circle r="6" />
+												<text x="10" y="4">FX</text>
+											</g>
+										) : null}
 									</>
 								) : null}
 							</g>
@@ -935,6 +703,51 @@ export function TownMapOverlay({
 					</g>
 				);
 			})}
+			{isDev && devMode === "effect-water" && waterRect ? (
+				<g className="stop-dev-points">
+					<rect
+						className="active-stop-outline"
+						x={waterRect.x}
+						y={waterRect.y}
+						width={waterRect.width}
+						height={waterRect.height}
+						fill="rgba(0, 136, 248, 0.12)"
+					/>
+					{showPointHandles
+						? (["start", "end"] as const).map((corner) => {
+								const point = devDrafts.effects.waterArea?.[corner];
+								if (!point) {
+									return null;
+								}
+
+								return (
+									<g
+										key={`water-${corner}`}
+										className={`dev-point dev-point--outline ${
+											devInteractionMode === "move" ? "is-draggable" : ""
+										}`}
+										transform={`translate(${point.x} ${point.y})`}
+										onPointerDown={(event) => {
+											if (devInteractionMode !== "move") {
+												return;
+											}
+											event.stopPropagation();
+											onDragTargetChange({
+												type: "effect-water-corner",
+												corner,
+											});
+										}}
+									>
+										<circle r="5" />
+										<text x="8" y="4">
+											{corner === "start" ? "1" : "2"}
+										</text>
+									</g>
+								);
+							})
+						: null}
+				</g>
+			) : null}
 
 			<g
 				className={`trainer-sprite ${characterVisible ? "" : "trainer-sprite--hidden"}`}
@@ -965,7 +778,7 @@ export function TownMapOverlay({
 					return null;
 				}
 
-				const outlineBounds = getOutlineBounds(outline);
+				const outlineBounds = getOverlayOutlineBounds(outline);
 				const isVisible = showStopTooltip && visibleStopId === stop.id;
 				const isActive = activeStopId === stop.id;
 				const showKeyboardHint = showStopTooltip && focusStopId === stop.id && !isActive;

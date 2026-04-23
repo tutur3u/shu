@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import {
 	defaultTownMapBackgroundId,
@@ -18,6 +17,8 @@ import {
 import {
 	createSeedDevDrafts,
 	MapDevTool,
+	normalizeDevDrafts,
+	type DevDoorFxDraft,
 	type DevMapDrafts,
 	type DevInteractionMode,
 	type DevLayerVisibility,
@@ -40,15 +41,17 @@ import {
 	isStaticAmbientActor,
 	OVERWORLD_AMBIENT_SPRITE_IDS,
 } from "./town-ambient";
-import { PortfolioStopPanel } from "./portfolio-stop-panel";
-import { SpriteLibraryPanel } from "./sprite-library-panel";
 import {
 	clampSpriteLibraryMode,
 	getSpriteLibraryAssetBySlug,
 	getSpriteLibraryAssetSlug,
 	type LibrarySelection,
 } from "./sprite-library-data";
-import { OVERWORLD_AMBIENT_SPRITES, TownMapOverlay } from "./town-map-overlay";
+import { TownGuideDialog } from "./town-guide-dialog";
+import { TownLibraryDialog } from "./town-library-dialog";
+import { TownMapOverlay } from "./town-map-overlay";
+import { OVERWORLD_AMBIENT_SPRITES } from "./town-map-overlay-sprites";
+import { TownPortfolioChrome } from "./town-portfolio-chrome";
 import {
 	ACTIVE_BACKGROUND_STORAGE_KEY,
 	DEV_DRAFT_STORAGE_KEY,
@@ -68,6 +71,7 @@ import {
 	SHOW_LEGACY_BACKGROUND_STORAGE_KEY,
 	mergeTravelPaths,
 } from "./town-portfolio-helpers";
+import { TownStopDialog } from "./town-stop-dialog";
 import {
 	clamp,
 	type DragTarget,
@@ -76,6 +80,33 @@ import {
 	isPointInPolygon,
 	isPolygonMode,
 } from "./town-map-utils";
+
+type DayPhase = "day" | "dusk" | "night";
+const DAY_PHASE_VALUES = ["day", "dusk", "night"] as const;
+const GUIDE_PANEL_VALUES = ["guide"] as const;
+const STOP_QUERY_VALUES = [
+	"about",
+	"projects",
+	"games",
+	"contact",
+	"admin",
+	"coming-soon",
+	"coming-soon-2",
+	"coming-soon-3",
+] as const;
+const BACKGROUND_QUERY_VALUES = ["background", "background-2"] as const;
+
+function getDayPhaseForHour(hour: number): DayPhase {
+	if (hour >= 19 || hour < 6) {
+		return "night";
+	}
+
+	if ((hour >= 6 && hour < 8) || (hour >= 17 && hour < 19)) {
+		return "dusk";
+	}
+
+	return "day";
+}
 
 export function TownPortfolio({
 	content,
@@ -87,8 +118,12 @@ export function TownPortfolio({
 	const [libraryQuery, setLibraryQuery] = useQueryStates(
 		{
 			asset: parseAsString,
+			bg: parseAsStringLiteral(BACKGROUND_QUERY_VALUES),
+			guide: parseAsStringLiteral(GUIDE_PANEL_VALUES),
 			library: parseAsStringLiteral(["open", "viewer"] as const),
 			mode: parseAsInteger,
+			phase: parseAsStringLiteral(DAY_PHASE_VALUES),
+			stop: parseAsStringLiteral(STOP_QUERY_VALUES),
 		},
 		{
 			history: "replace",
@@ -96,10 +131,18 @@ export function TownPortfolio({
 	);
 	const ambientSpriteSeed = OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id).join("|");
 	const editorEnabled = true;
-	const defaultMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
+	const initialBackgroundId = libraryQuery.bg ?? defaultTownMapBackgroundId;
+	const initialStop =
+		libraryQuery.stop
+			? stops.find((stop) => stop.id === libraryQuery.stop) ?? null
+			: null;
+	const initialMapVariant = getTownMapVariant(initialBackgroundId);
+	const initialCharacterPosition =
+		initialStop && initialBackgroundId === defaultTownMapBackgroundId
+			? initialStop.door
+			: initialMapVariant.startPosition;
 	const [activeBackgroundId, setActiveBackgroundId] =
-		useState<TownMapBackgroundId>(defaultTownMapBackgroundId);
-	const [guideOpen, setGuideOpen] = useState(false);
+		useState<TownMapBackgroundId>(initialBackgroundId);
 	const [hoveredStopId, setHoveredStopId] = useState<StopId | null>(null);
 	const [devToolOpen, setDevToolOpen] = useState(false);
 	const [devMode, setDevMode] = useState<DevToolMode>("all");
@@ -111,17 +154,21 @@ export function TownPortfolio({
 		() => getDefaultLayerVisibility("all"),
 	);
 	const [devDrafts, setDevDrafts] = useState<DevMapDrafts>(() =>
-		createSeedDevDrafts(defaultTownMapBackgroundId),
+		createSeedDevDrafts(initialBackgroundId),
 	);
 	const [draftsHydrated, setDraftsHydrated] = useState(false);
 	const [characterPosition, setCharacterPosition] = useState<Position>(
-		defaultMapVariant.startPosition,
+		initialCharacterPosition,
 	);
-	const [activeStopId, setActiveStopId] = useState<StopId | null>(null);
+	const [activeStopId, setActiveStopId] = useState<StopId | null>(
+		initialStop?.id ?? null,
+	);
 	const [travelingTo, setTravelingTo] = useState<StopId | null>(null);
-	const [characterVisible, setCharacterVisible] = useState(true);
+	const [characterVisible, setCharacterVisible] = useState(initialStop === null);
 	const [skipTravel, setSkipTravel] = useState(false);
-	const [lastStopId, setLastStopId] = useState<StopId | null>(null);
+	const [lastStopId, setLastStopId] = useState<StopId | null>(
+		initialStop?.id ?? null,
+	);
 	const [exitPassThroughStopId, setExitPassThroughStopId] = useState<StopId | null>(null);
 	const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 	const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
@@ -131,18 +178,20 @@ export function TownPortfolio({
 	const [facing, setFacing] = useState<"up" | "down" | "left" | "right">("down");
 	const [cameraReady, setCameraReady] = useState(false);
 	const [showLegacyBackground, setShowLegacyBackground] = useState(false);
+	const [dayPhase, setDayPhase] = useState<DayPhase>(libraryQuery.phase ?? "day");
 	const [spriteTick, setSpriteTick] = useState(0);
 	const [ambientActors, setAmbientActors] = useState<AmbientActorState[]>(() =>
-		createAmbientActors(defaultTownMapBackgroundId),
+		createAmbientActors(initialBackgroundId),
 	);
 	const [viewportSize, setViewportSize] = useState(() => ({
-		width: defaultMapVariant.width,
-		height: defaultMapVariant.height,
+		width: initialMapVariant.width,
+		height: initialMapVariant.height,
 	}));
 	const activeMapVariant = useMemo(
 		() => getTownMapVariant(activeBackgroundId),
 		[activeBackgroundId],
 	);
+	const guideOpen = libraryQuery.guide === "guide";
 	const libraryOpen = libraryQuery.library !== null;
 	const librarySelection = useMemo<LibrarySelection | null>(() => {
 		if (libraryQuery.library !== "viewer") {
@@ -165,10 +214,11 @@ export function TownPortfolio({
 	const movementTimestampRef = useRef<number | null>(null);
 	const movementTickRef = useRef<((timestamp: number) => void) | null>(null);
 	const pressedKeysRef = useRef<Set<string>>(new Set());
-	const positionRef = useRef(defaultMapVariant.startPosition);
+	const positionRef = useRef(initialCharacterPosition);
 	const ambientAnimationFrameRef = useRef<number | null>(null);
 	const svgRef = useRef<SVGSVGElement | null>(null);
 	const viewportRef = useRef<HTMLDivElement | null>(null);
+	const backgroundHydratedRef = useRef(false);
 	const clearTimer = useCallback(() => {
 		if (travelFrameRef.current) {
 			window.cancelAnimationFrame(travelFrameRef.current);
@@ -200,8 +250,24 @@ export function TownPortfolio({
 	const openLibrary = useCallback(() => {
 		void setLibraryQuery({
 			asset: null,
+			guide: null,
 			library: "open",
 			mode: null,
+			stop: null,
+		});
+	}, [setLibraryQuery]);
+	const closeGuide = useCallback(() => {
+		void setLibraryQuery({
+			guide: null,
+		});
+	}, [setLibraryQuery]);
+	const openGuide = useCallback(() => {
+		void setLibraryQuery({
+			asset: null,
+			guide: "guide",
+			library: null,
+			mode: null,
+			stop: null,
 		});
 	}, [setLibraryQuery]);
 	const setLibrarySelection = useCallback((selection: LibrarySelection | null) => {
@@ -220,6 +286,35 @@ export function TownPortfolio({
 			mode: selection.modeIndex > 0 ? selection.modeIndex : null,
 		});
 	}, [setLibraryQuery]);
+	const cycleDayPhase = useCallback(() => {
+		setDayPhase((current) => {
+			const nextPhase =
+				current === "day" ? "dusk" : current === "dusk" ? "night" : "day";
+			void setLibraryQuery({
+				phase: nextPhase,
+			});
+			return nextPhase;
+		});
+	}, [setLibraryQuery]);
+	useEffect(() => {
+		const syncPhase = () => {
+			setDayPhase(
+				libraryQuery.phase ?? getDayPhaseForHour(new Date().getHours()),
+			);
+		};
+		const frame = window.requestAnimationFrame(syncPhase);
+
+		if (libraryQuery.phase) {
+			return () => window.cancelAnimationFrame(frame);
+		}
+
+		const intervalId = window.setInterval(syncPhase, 60_000);
+
+		return () => {
+			window.cancelAnimationFrame(frame);
+			window.clearInterval(intervalId);
+		};
+	}, [libraryQuery.phase]);
 	useEffect(() => {
 		if (libraryQuery.library === "viewer" && !librarySelection) {
 			void setLibraryQuery({
@@ -257,10 +352,10 @@ export function TownPortfolio({
 	}, [cancelCurrentMovement, closeLibrary, syncCharacterPosition]);
 	const prepareForPlayerTravel = useCallback(() => {
 		cancelCurrentMovement();
-		setGuideOpen(false);
+		closeGuide();
 		closeLibrary();
 		setCharacterVisible(true);
-	}, [cancelCurrentMovement, closeLibrary]);
+	}, [cancelCurrentMovement, closeGuide, closeLibrary]);
 	const availableBackgrounds = useMemo(
 		() =>
 			showLegacyBackground
@@ -271,6 +366,10 @@ export function TownPortfolio({
 		[showLegacyBackground],
 	);
 	const seedLayoutEnabled = activeBackgroundId === LEGACY_BACKGROUND_ID;
+	const shortcutStopIds = useMemo(
+		() => new Set<StopId>(["about", "projects", "games", "contact"]),
+		[],
+	);
 	const baseStops = useMemo(
 		() =>
 			seedLayoutEnabled
@@ -301,6 +400,48 @@ export function TownPortfolio({
 	);
 	const activeStop = activeStopId ? getStop(effectiveStops, activeStopId) : null;
 	const instantTravel = skipTravel || prefersReducedMotion;
+	const shortcutStops = useMemo(
+		() => effectiveStops.filter((stop) => shortcutStopIds.has(stop.id)),
+		[effectiveStops, shortcutStopIds],
+	);
+	const dayPhaseMeta = useMemo(() => {
+		if (dayPhase === "night") {
+			return {
+				label: "Night",
+				buttonLabel: "Clock: Night",
+				style: {
+					background:
+						"linear-gradient(180deg, rgba(0, 2, 10, 0.78) 0%, rgba(0, 8, 28, 0.88) 30%, rgba(4, 18, 58, 0.9) 100%), radial-gradient(circle at 18% 14%, rgba(128, 168, 248, 0.08), transparent 22%), radial-gradient(circle at 72% 12%, rgba(0, 136, 248, 0.08), transparent 18%), linear-gradient(180deg, rgba(10, 28, 84, 0.22), rgba(2, 6, 20, 0.58) 100%)",
+					mixBlendMode: "multiply" as const,
+					opacity: 1,
+				},
+			};
+		}
+
+		if (dayPhase === "dusk") {
+			return {
+				label: "Dusk",
+				buttonLabel: "Clock: Dusk",
+				style: {
+					background:
+						"linear-gradient(180deg, rgba(248, 208, 120, 0.12) 0%, rgba(232, 144, 80, 0.26) 38%, rgba(152, 0, 176, 0.28) 100%), radial-gradient(circle at 50% 0%, rgba(248, 248, 0, 0.12), transparent 24%), linear-gradient(180deg, rgba(88, 88, 40, 0.08), rgba(40, 24, 48, 0.18))",
+					mixBlendMode: "multiply" as const,
+					opacity: 1,
+				},
+			};
+		}
+
+		return {
+			label: "Day",
+			buttonLabel: "Clock: Day",
+			style: {
+				background:
+					"radial-gradient(circle at 18% 6%, rgba(248, 248, 248, 0.14), transparent 18%), linear-gradient(180deg, rgba(248, 248, 248, 0.02), rgba(248, 248, 248, 0.08))",
+				mixBlendMode: "screen" as const,
+				opacity: 0.78,
+			},
+		};
+	}, [dayPhase]);
 	const sceneLabel = activeStop
 		? `${activeStop.shortLabel} interior`
 		: travelingTo
@@ -310,25 +451,34 @@ export function TownPortfolio({
 				: "Town square";
 
 	useEffect(() => {
-		const frame = window.requestAnimationFrame(() => {
-			const legacyBackgroundEnabled = isLegacyBackgroundEnabled(
-				window.localStorage.getItem(SHOW_LEGACY_BACKGROUND_STORAGE_KEY),
-			);
-			const savedBackground = window.localStorage.getItem(
+			const frame = window.requestAnimationFrame(() => {
+				const legacyBackgroundEnabled = isLegacyBackgroundEnabled(
+					window.localStorage.getItem(SHOW_LEGACY_BACKGROUND_STORAGE_KEY),
+				);
+				const savedBackground = window.localStorage.getItem(
 				ACTIVE_BACKGROUND_STORAGE_KEY,
 			);
 
-			setShowLegacyBackground(legacyBackgroundEnabled);
-			if (
-				isTownMapBackgroundId(savedBackground) &&
-				(legacyBackgroundEnabled || savedBackground !== LEGACY_BACKGROUND_ID)
-			) {
-				setActiveBackgroundId(savedBackground);
-			}
-		});
+				const queryBackground = libraryQuery.bg;
+				const shouldShowLegacy =
+					legacyBackgroundEnabled || queryBackground === LEGACY_BACKGROUND_ID;
+
+				setShowLegacyBackground(shouldShowLegacy);
+				if (queryBackground) {
+					setActiveBackgroundId(queryBackground);
+					return;
+				}
+
+				if (
+					isTownMapBackgroundId(savedBackground) &&
+					(shouldShowLegacy || savedBackground !== LEGACY_BACKGROUND_ID)
+				) {
+					setActiveBackgroundId(savedBackground);
+				}
+			});
 
 		return () => window.cancelAnimationFrame(frame);
-	}, []);
+	}, [libraryQuery.bg]);
 
 	useEffect(() => {
 		window.localStorage.setItem(
@@ -336,7 +486,11 @@ export function TownPortfolio({
 			String(showLegacyBackground),
 		);
 
-		if (!showLegacyBackground && activeBackgroundId === LEGACY_BACKGROUND_ID) {
+		if (
+			!showLegacyBackground &&
+			activeBackgroundId === LEGACY_BACKGROUND_ID &&
+			libraryQuery.bg !== LEGACY_BACKGROUND_ID
+		) {
 			const frame = window.requestAnimationFrame(() => {
 				resetTownState({
 					backgroundId: defaultTownMapBackgroundId,
@@ -344,11 +498,20 @@ export function TownPortfolio({
 					position: getTownMapVariant(defaultTownMapBackgroundId).startPosition,
 				});
 				setActiveBackgroundId(defaultTownMapBackgroundId);
+				void setLibraryQuery({
+					bg: defaultTownMapBackgroundId,
+				});
 			});
 
 			return () => window.cancelAnimationFrame(frame);
 		}
-	}, [activeBackgroundId, resetTownState, showLegacyBackground]);
+	}, [
+		activeBackgroundId,
+		libraryQuery.bg,
+		resetTownState,
+		setLibraryQuery,
+		showLegacyBackground,
+	]);
 
 	useEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
@@ -360,12 +523,17 @@ export function TownPortfolio({
 					: null;
 			const rawDrafts =
 				window.localStorage.getItem(primaryStorageKey) ?? legacyDrafts;
+			const isInitialHydration = !backgroundHydratedRef.current;
 
-			resetTownState({
-				backgroundId: activeBackgroundId,
-				draftsHydrated: false,
-				position: nextStartPosition,
-			});
+			backgroundHydratedRef.current = true;
+
+			if (!isInitialHydration) {
+				resetTownState({
+					backgroundId: activeBackgroundId,
+					draftsHydrated: false,
+					position: nextStartPosition,
+				});
+			}
 
 			if (!rawDrafts) {
 				window.localStorage.setItem(ACTIVE_BACKGROUND_STORAGE_KEY, activeBackgroundId);
@@ -374,7 +542,12 @@ export function TownPortfolio({
 			}
 
 			try {
-				setDevDrafts(JSON.parse(rawDrafts) as DevMapDrafts);
+				setDevDrafts(
+					normalizeDevDrafts(
+						JSON.parse(rawDrafts) as Partial<DevMapDrafts>,
+						activeBackgroundId,
+					),
+				);
 			} catch {
 				window.localStorage.removeItem(primaryStorageKey);
 				if (legacyDrafts) {
@@ -643,6 +816,9 @@ export function TownPortfolio({
 			position: getTownMapVariant(nextBackgroundId).startPosition,
 		});
 		setActiveBackgroundId(nextBackgroundId);
+		void setLibraryQuery({
+			bg: nextBackgroundId,
+		});
 	}
 
 	function resetActiveBackgroundDrafts() {
@@ -729,6 +905,29 @@ export function TownPortfolio({
 		};
 	}
 
+	function ensureDoorFxDraft(
+		current: DevMapDrafts,
+		stopId: StopId,
+	): DevDoorFxDraft {
+		const existing = current.effects.doorFx[stopId];
+
+		if (existing) {
+			return {
+				anchor: existing.anchor,
+				hidden: existing.hidden ?? false,
+				scale: existing.scale ?? 1,
+			};
+		}
+
+		const stopDraft = ensureStopDraft(current, stopId);
+
+		return {
+			anchor: stopDraft.door,
+			hidden: false,
+			scale: 1,
+		};
+	}
+
 	function moveDraftPoint(target: DragTarget, point: Position) {
 		updateDrafts((current) => {
 			if (target.type === "polygon-point") {
@@ -744,6 +943,42 @@ export function TownPortfolio({
 								}
 							: entry,
 					),
+				};
+			}
+
+			if (target.type === "effect-door-anchor") {
+				const doorFxDraft = ensureDoorFxDraft(current, target.stopId);
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						doorFx: {
+							...current.effects.doorFx,
+							[target.stopId]: {
+								...doorFxDraft,
+								anchor: point,
+							},
+						},
+					},
+				};
+			}
+
+			if (target.type === "effect-water-corner") {
+				const currentWaterArea = current.effects.waterArea ?? {
+					start: point,
+					end: point,
+				};
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						waterArea: {
+							...currentWaterArea,
+							[target.corner]: point,
+						},
+					},
 				};
 			}
 
@@ -826,6 +1061,48 @@ export function TownPortfolio({
 				return { ...current, polygons: nextPolygons };
 			}
 
+			if (devMode === "effect-door") {
+				const doorFxDraft = ensureDoorFxDraft(current, devSelectedStopId);
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						doorFx: {
+							...current.effects.doorFx,
+							[devSelectedStopId]: {
+								...doorFxDraft,
+								anchor: point,
+							},
+						},
+					},
+				};
+			}
+
+			if (devMode === "effect-water") {
+				const currentWaterArea = current.effects.waterArea;
+				const shouldStartNewArea =
+					!currentWaterArea ||
+					(currentWaterArea.start.x !== currentWaterArea.end.x ||
+						currentWaterArea.start.y !== currentWaterArea.end.y);
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						waterArea: shouldStartNewArea
+							? {
+									start: point,
+									end: point,
+								}
+							: {
+									start: currentWaterArea.start,
+									end: point,
+								},
+					},
+				};
+			}
+
 			const stopDraft = current.stops[devSelectedStopId] ?? {};
 			const nextStopDraft =
 				devMode === "stop-outline"
@@ -856,6 +1133,48 @@ export function TownPortfolio({
 				);
 
 				return { ...current, polygons: nextPolygons };
+			}
+
+			if (devMode === "effect-door") {
+				if (!current.effects.doorFx[devSelectedStopId]) {
+					return current;
+				}
+
+				const nextDoorFx = { ...current.effects.doorFx };
+				delete nextDoorFx[devSelectedStopId];
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						doorFx: nextDoorFx,
+					},
+				};
+			}
+
+			if (devMode === "effect-water") {
+				const currentWaterArea = current.effects.waterArea;
+
+				if (!currentWaterArea) {
+					return current;
+				}
+
+				const shouldClear =
+					currentWaterArea.start.x === currentWaterArea.end.x &&
+					currentWaterArea.start.y === currentWaterArea.end.y;
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						waterArea: shouldClear
+							? undefined
+							: {
+									start: currentWaterArea.start,
+									end: currentWaterArea.start,
+								},
+					},
+				};
 			}
 
 			const stopDraft = current.stops[devSelectedStopId];
@@ -894,6 +1213,37 @@ export function TownPortfolio({
 				};
 			}
 
+			if (devMode === "effect-door") {
+				if (!current.effects.doorFx[devSelectedStopId]) {
+					return current;
+				}
+
+				const nextDoorFx = { ...current.effects.doorFx };
+				delete nextDoorFx[devSelectedStopId];
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						doorFx: nextDoorFx,
+					},
+				};
+			}
+
+			if (devMode === "effect-water") {
+				if (!current.effects.waterArea) {
+					return current;
+				}
+
+				return {
+					...current,
+					effects: {
+						...current.effects,
+						waterArea: undefined,
+					},
+				};
+			}
+
 			const stopDraft = current.stops[devSelectedStopId];
 
 			if (!stopDraft) {
@@ -919,6 +1269,33 @@ export function TownPortfolio({
 		});
 	}
 
+	function updateDoorFx(stopId: StopId, updater: (current: DevDoorFxDraft) => DevDoorFxDraft) {
+		updateDrafts((current) => ({
+			...current,
+			effects: {
+				...current.effects,
+				doorFx: {
+					...current.effects.doorFx,
+					[stopId]: updater(ensureDoorFxDraft(current, stopId)),
+				},
+			},
+		}));
+	}
+
+	function handleDoorFxScaleChange(stopId: StopId, scale: number) {
+		updateDoorFx(stopId, (current) => ({
+			...current,
+			scale,
+		}));
+	}
+
+	function handleDoorFxHiddenChange(stopId: StopId, hidden: boolean) {
+		updateDoorFx(stopId, (current) => ({
+			...current,
+			hidden,
+		}));
+	}
+
 	async function copyText(text: string) {
 		await navigator.clipboard.writeText(text);
 	}
@@ -933,6 +1310,33 @@ export function TownPortfolio({
 				await copyText(JSON.stringify(polygon, null, 2));
 			}
 
+			return;
+		}
+
+		if (devMode === "effect-door") {
+			const doorFx = devDrafts.effects.doorFx[devSelectedStopId];
+			if (doorFx) {
+				await copyText(
+					JSON.stringify(
+						{ effects: { doorFx: { [devSelectedStopId]: doorFx } } },
+						null,
+						2,
+					),
+				);
+			}
+			return;
+		}
+
+		if (devMode === "effect-water") {
+			if (devDrafts.effects.waterArea) {
+				await copyText(
+					JSON.stringify(
+						{ effects: { waterArea: devDrafts.effects.waterArea } },
+						null,
+						2,
+					),
+				);
+			}
 			return;
 		}
 
@@ -1018,8 +1422,15 @@ export function TownPortfolio({
 			return activeStopDraft.outline;
 		}
 
+		if (devMode === "effect-water" && devDrafts.effects.waterArea) {
+			return [
+				devDrafts.effects.waterArea.start,
+				devDrafts.effects.waterArea.end,
+			];
+		}
+
 		return [];
-	}, [activePolygonDraft, activeStopDraft, devMode]);
+	}, [activePolygonDraft, activeStopDraft, devDrafts.effects.waterArea, devMode]);
 
 	const showCaptureOnly = devInteractionMode === "capture";
 	const showPointHandles =
@@ -1960,6 +2371,10 @@ export function TownPortfolio({
 			setActiveStopId(stopId);
 			setLastStopId(stopId);
 			setCharacterVisible(false);
+			void setLibraryQuery({
+				guide: null,
+				stop: stopId,
+			});
 		}, stopId);
 	}
 
@@ -1978,6 +2393,9 @@ export function TownPortfolio({
 		setActiveStopId(null);
 		setTravelingTo(stop.id);
 		setCharacterVisible(true);
+		void setLibraryQuery({
+			stop: null,
+		});
 
 		const path = buildStopExitPath(stop);
 
@@ -2079,6 +2497,37 @@ export function TownPortfolio({
 			`translate3d(${cameraFrame.x}px, ${cameraFrame.y}px, 0) scale(${cameraFrame.scale})`,
 		[cameraFrame.scale, cameraFrame.x, cameraFrame.y],
 	);
+	const sceneSurfaceStyle = useMemo(
+		() =>
+			cameraReady
+				? {
+						filter:
+							dayPhase === "night"
+								? "brightness(0.32) saturate(0.52) contrast(1.04)"
+								: dayPhase === "dusk"
+									? "brightness(0.84) saturate(1.04) contrast(0.98) sepia(0.14) hue-rotate(-8deg)"
+									: "brightness(1) saturate(1)",
+						height: activeMapVariant.height,
+						transform: sceneTransform,
+						transformOrigin: "top left",
+						width: activeMapVariant.width,
+					}
+				: {
+						filter:
+							dayPhase === "night"
+								? "brightness(0.32) saturate(0.52) contrast(1.04)"
+								: dayPhase === "dusk"
+									? "brightness(0.84) saturate(1.04) contrast(0.98) sepia(0.14) hue-rotate(-8deg)"
+									: "brightness(1) saturate(1)",
+					},
+		[
+			activeMapVariant.height,
+			activeMapVariant.width,
+			cameraReady,
+			dayPhase,
+			sceneTransform,
+		],
+	);
 
 	const onEscapeClose = useEffectEvent(() => {
 		if (activeStopId) {
@@ -2107,7 +2556,7 @@ export function TownPortfolio({
 		}
 
 		if (guideOpen) {
-			setGuideOpen(false);
+			closeGuide();
 		}
 	});
 
@@ -2321,64 +2770,31 @@ export function TownPortfolio({
 	return (
 		<div className="relative min-h-screen overflow-hidden">
 			<div className="town-page__chrome fixed inset-0 z-50 pointer-events-none" />
+			<div
+				className="town-page__timewash fixed inset-0 z-5 pointer-events-none"
+				style={dayPhaseMeta.style}
+			/>
 
 			<main className="relative z-10 h-[100dvh] w-screen overflow-hidden">
 				<section className="h-full w-full bg-transparent" aria-label="Pokemon-inspired portfolio town">
-					<div className="pointer-events-none absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20 flex flex-col gap-3 sm:left-6 sm:right-6 sm:top-6 sm:flex-row sm:items-start sm:justify-between">
-						<div className="pointer-events-auto flex flex-wrap items-stretch gap-3 sm:max-w-[calc(100%-11rem)] sm:items-center">
-							<button
-								type="button"
-								className="pixel-button min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
-								onClick={() => setGuideOpen(true)}
-							>
-								Guide
-							</button>
-							<button
-								type="button"
-								className={`pixel-button min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm ${libraryOpen ? "pixel-button--active" : ""}`}
-								onClick={openLibrary}
-							>
-								Library
-							</button>
-							{availableBackgrounds.length > 1 ? (
-								<label className="pixel-card pointer-events-auto flex min-w-0 flex-[999_1_16rem] items-center gap-3 bg-white/85 px-3 py-2 sm:flex-[0_1_20rem] sm:px-4">
-									<span className="shrink-0 font-dot-gothic text-[10px] uppercase tracking-wider text-ink-soft sm:text-xs">
-										Background
-									</span>
-									<select
-										className="min-w-0 flex-1 bg-transparent font-dot-gothic text-xs outline-none sm:text-sm"
-										value={activeBackgroundId}
-										onChange={(event) =>
-											handleBackgroundChange(
-												event.target.value as TownMapBackgroundId,
-											)
-										}
-									>
-										{availableBackgrounds.map((background) => (
-											<option key={background.id} value={background.id}>
-												{background.label}
-											</option>
-										))}
-									</select>
-								</label>
-							) : null}
-							{editorEnabled ? (
-								<button
-									type="button"
-									className="pixel-button pixel-button--sky min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
-									onClick={() => setDevToolOpen(true)}
-								>
-									Map Editor
-								</button>
-							) : null}
-						</div>
-						<Link
-							className="pixel-button pointer-events-auto min-h-[52px] w-full px-4 py-3 text-center text-xs sm:min-h-0 sm:w-auto sm:px-6 sm:py-3 sm:text-sm"
-							href="/admin"
-						>
-							Admin Route
-						</Link>
-					</div>
+					<TownPortfolioChrome
+						activeBackgroundId={activeBackgroundId}
+						activeStopId={activeStopId}
+						availableBackgrounds={availableBackgrounds}
+						dayPhaseButtonLabel={dayPhaseMeta.buttonLabel}
+						editorEnabled={editorEnabled}
+						focusStopId={focusStopId}
+						isNightTheme={dayPhase === "night"}
+						libraryOpen={libraryOpen}
+						onBackgroundChange={handleBackgroundChange}
+						onCycleDayPhase={cycleDayPhase}
+						onEnterStop={handleEnterStop}
+						onOpenGuide={openGuide}
+						onOpenLibrary={openLibrary}
+						onOpenMapEditor={() => setDevToolOpen(true)}
+						shortcutStops={shortcutStops}
+						travelingTo={travelingTo}
+					/>
 
 					<div
 						ref={viewportRef}
@@ -2396,16 +2812,7 @@ export function TownPortfolio({
 										? "cursor-grab"
 										: ""
 							}`}
-							style={
-								cameraReady
-									? {
-											height: activeMapVariant.height,
-											transform: sceneTransform,
-											transformOrigin: "top left",
-											width: activeMapVariant.width,
-										}
-									: undefined
-							}
+							style={sceneSurfaceStyle}
 						>
 							<Image
 								className="map-image"
@@ -2453,219 +2860,36 @@ export function TownPortfolio({
 				</section>
 			</main>
 
-			{guideOpen ? (
-				<div
-					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-4 backdrop-blur-sm sm:p-6"
-					role="presentation"
-					onClick={() => setGuideOpen(false)}
-				>
-					<section
-						className="pokedex-box flex w-[min(720px,calc(100vw-1rem))] max-w-full max-h-[min(calc(100dvh-1rem),900px)] flex-col gap-5 overflow-x-hidden overflow-y-auto p-5 scrollbar-thin sm:gap-6 sm:p-8"
-						role="dialog"
-						aria-modal="true"
-						aria-labelledby="guide-dialog-title"
-						onClick={(event) => event.stopPropagation()}
-					>
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="pixel-eyebrow">Pokemon Town Portfolio</p>
-								<h2 className="m-0 font-dot-gothic text-xl leading-tight sm:text-2xl" id="guide-dialog-title">Choose your route through the work.</h2>
-							</div>
-							<button className="pixel-button w-full px-4 py-2 text-sm sm:w-auto" type="button" onClick={() => setGuideOpen(false)}>
-								Close
-							</button>
-						</div>
+			<TownGuideDialog
+				activeStopId={activeStopId}
+				content={content}
+				effectiveStops={effectiveStops}
+				instantTravel={instantTravel}
+				isNightTheme={dayPhase === "night"}
+				onClose={closeGuide}
+				onEnterStop={handleEnterStop}
+				onToggleLegacyBackground={() => setShowLegacyBackground(!showLegacyBackground)}
+				onToggleSkipTravel={() => setSkipTravel(!skipTravel)}
+				open={guideOpen}
+				sceneLabel={sceneLabel}
+				showLegacyBackground={showLegacyBackground}
+				stops={stops}
+			/>
 
-						<p className="m-0 text-lg leading-tight sm:text-2xl">
-							{content.profile.intro}
-							<span className="pixel-arrow">▼</span>
-						</p>
+			<TownLibraryDialog
+				isNightTheme={dayPhase === "night"}
+				onClose={closeLibrary}
+				onSelectionChange={setLibrarySelection}
+				open={libraryOpen}
+				selection={librarySelection}
+			/>
 
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
-								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Current scene</span>
-								<strong className="truncate text-lg leading-tight sm:text-xl">{sceneLabel}</strong>
-							</div>
-							<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4">
-								<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">Mode</span>
-								<strong className="truncate text-lg leading-tight sm:text-xl">{instantTravel ? "Recruiter mode" : "Walk mode"}</strong>
-							</div>
-							{content.profile.quickStats.map((stat) => (
-								<div className="pixel-card flex min-w-0 flex-col gap-1 bg-white/80 p-4" key={stat.label}>
-									<span className="font-dot-gothic text-xs uppercase tracking-wider text-ink-soft">{stat.label}</span>
-									<strong className="truncate text-lg leading-tight sm:text-xl">{stat.value}</strong>
-								</div>
-							))}
-						</div>
-
-						<div className="flex flex-col gap-4 border-t border-line/10 pt-6">
-							<div className="flex items-center justify-between gap-4">
-								<p className="pixel-eyebrow">Settings</p>
-							</div>
-							<div className="pixel-card flex min-w-0 box-border flex-col gap-4 bg-white/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-								<div className="flex min-w-0 flex-1 flex-col gap-1">
-									<strong className="truncate text-base leading-tight sm:text-lg">Instant Travel</strong>
-									<span className="font-dot-gothic text-xs text-ink-soft">Skip walking transitions between stops</span>
-								</div>
-								<button
-									type="button"
-									className={`pixel-button w-full px-4 py-2 text-sm transition-colors sm:w-auto ${instantTravel ? 'bg-accent' : 'bg-white'}`}
-									onClick={() => setSkipTravel(!skipTravel)}
-								>
-									{instantTravel ? "Enabled" : "Disabled"}
-								</button>
-							</div>
-							<div className="pixel-card flex min-w-0 box-border flex-col gap-4 bg-white/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-								<div className="flex min-w-0 flex-1 flex-col gap-1">
-									<strong className="truncate text-base leading-tight sm:text-lg">Legacy Background 1</strong>
-									<span className="font-dot-gothic text-xs text-ink-soft">Show the original background as an optional alternate map</span>
-								</div>
-								<button
-									type="button"
-									className={`pixel-button w-full px-4 py-2 text-sm transition-colors sm:w-auto ${showLegacyBackground ? 'bg-accent' : 'bg-white'}`}
-									onClick={() => setShowLegacyBackground(!showLegacyBackground)}
-								>
-									{showLegacyBackground ? "Enabled" : "Hidden"}
-								</button>
-							</div>
-						</div>
-
-						<div className="grid gap-4 pt-4">
-							{stops.map((stop) => {
-								const isCurrent = activeStopId === stop.id;
-								const isRecommended = stop.id === "about" || stop.id === "projects";
-								const effectiveStop = getStop(effectiveStops, stop.id);
-								const hasMappedStop =
-									effectiveStop.outline.length >= 3 &&
-									!isUnsetPosition(effectiveStop.door);
-
-								return (
-									<button
-										key={stop.id}
-										type="button"
-										className={`group flex min-w-0 box-border flex-col items-start gap-4 border-4 p-4 text-left transition-all sm:flex-row sm:items-center sm:gap-5 ${
-											!hasMappedStop
-												? "cursor-not-allowed border-line-soft/10 bg-white/40 opacity-50"
-												: isCurrent
-												? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
-												: isRecommended
-													? "border-accent-strong/40 bg-accent/10 hover:bg-accent/20"
-													: "border-line-soft/10 bg-white/60 hover:bg-white"
-										}`}
-										disabled={!hasMappedStop}
-										onClick={() => {
-											handleEnterStop(stop.id);
-											setGuideOpen(false);
-										}}
-									>
-										<span className={`flex h-12 w-12 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-lg sm:h-14 sm:w-14 sm:text-xl ${isCurrent ? 'bg-white' : 'bg-sky'}`}>
-											{stop.order}
-										</span>
-										<div className="flex min-w-0 flex-1 flex-col gap-1">
-											<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-												<strong className="truncate text-lg leading-tight sm:text-xl">{stop.title}</strong>
-												{isRecommended && (
-													<span className="shrink-0 bg-accent-strong px-2 py-0.5 font-dot-gothic text-[10px] uppercase text-white">
-														Recommended
-													</span>
-												)}
-											</div>
-											<p className="m-0 text-base leading-tight text-ink-soft sm:truncate sm:text-lg">{stop.preview}</p>
-										</div>
-										<span className="ml-auto hidden font-dot-gothic text-xl text-accent-strong opacity-0 transition-opacity group-hover:opacity-100 sm:block sm:animate-pixel-blink">▶</span>
-									</button>
-								);
-							})}
-						</div>
-					</section>
-				</div>
-			) : null}
-
-			{libraryOpen ? (
-				<div
-					className="fixed inset-0 z-20 grid place-items-center bg-black/45 p-4 backdrop-blur-sm sm:p-6"
-					role="presentation"
-					onClick={closeLibrary}
-				>
-					<section
-						className="pokedex-box flex w-[min(1400px,calc(100vw-1rem))] max-w-full max-h-[min(calc(100dvh-1rem),980px)] flex-col gap-5 overflow-x-hidden overflow-y-auto p-5 scrollbar-thin sm:gap-6 sm:p-8"
-						role="dialog"
-						aria-modal="true"
-						aria-labelledby="library-dialog-title"
-						onClick={(event) => event.stopPropagation()}
-					>
-						<div className="flex flex-col gap-3 border-b border-line/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="pixel-eyebrow">Sprite Library</p>
-								<h2
-									className="m-0 font-dot-gothic text-xl leading-tight sm:text-2xl"
-									id="library-dialog-title"
-								>
-									Character sheets and shared palette
-								</h2>
-							</div>
-								<button
-								className="pixel-button w-full px-4 py-2 text-sm sm:w-auto"
-								type="button"
-								onClick={closeLibrary}
-							>
-								Close Library
-							</button>
-						</div>
-
-						<SpriteLibraryPanel
-							selection={librarySelection}
-							onSelectionChange={setLibrarySelection}
-						/>
-					</section>
-				</div>
-			) : null}
-
-			{activeStop && !guideOpen ? (
-				<div
-					className="fixed inset-0 z-20 grid place-items-center bg-black/40 p-4 backdrop-blur-md sm:p-6"
-					role="presentation"
-					onClick={handleCloseStop}
-				>
-					<section
-						className="pokedex-box flex w-[min(1360px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),980px)] flex-col overflow-hidden p-5 sm:p-8"
-						role="dialog"
-						aria-modal="true"
-						aria-labelledby="town-window-title"
-						onClick={(event) => event.stopPropagation()}
-					>
-						<div className="flex flex-col gap-4 border-b border-line/10 pb-6 sm:flex-row sm:items-center sm:justify-between">
-							<div className="flex items-center gap-5">
-								<div className="flex h-14 w-12 shrink-0 items-center justify-center border-4 border-line bg-sky font-dot-gothic text-xl shadow-pixel sm:h-16 sm:w-14 sm:text-2xl">
-									{activeStop.order}
-								</div>
-								<div>
-									<p className="pixel-eyebrow">{activeStop.title}</p>
-									<h2 className="m-0 font-dot-gothic text-2xl leading-tight sm:text-3xl" id="town-window-title">{activeStop.shortLabel}</h2>
-								</div>
-							</div>
-							<button className="pixel-button w-full px-6 py-3 text-base sm:w-auto sm:text-lg" type="button" onClick={handleCloseStop}>
-								Close Room
-							</button>
-						</div>
-
-						<div className="flex-1 min-h-0 overflow-auto pr-2 pt-8 scrollbar-thin">
-							<div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-[1fr_320px]">
-								<div className="pixel-card flex flex-col gap-1 border-line-soft/10 bg-white/60 p-5">
-									<p className="m-0 text-lg leading-tight text-ink sm:text-2xl">{activeStop.subtitle}</p>
-									<span className="font-dot-gothic text-xs uppercase tracking-widest text-ink-soft">Current stop</span>
-								</div>
-								<div className="pixel-card flex flex-col gap-2 bg-accent p-5 shadow-pixel">
-									<p className="pixel-eyebrow text-xs!">At A Glance</p>
-									<strong className="text-lg leading-tight sm:text-xl">{activeStop.preview}</strong>
-								</div>
-							</div>
-
-							<PortfolioStopPanel content={content} stop={activeStop} />
-						</div>
-					</section>
-				</div>
-			) : null}
+			<TownStopDialog
+				content={content}
+				isNightTheme={dayPhase === "night"}
+				onClose={handleCloseStop}
+				stop={!guideOpen ? activeStop : null}
+			/>
 
 			{editorEnabled ? (
 				<MapDevTool
@@ -2685,6 +2909,8 @@ export function TownPortfolio({
 					onCopyAll={copyAllDrafts}
 					onCreatePolygonZone={createPolygonZone}
 					onDeleteActivePolygonZone={deleteActivePolygonZone}
+					onDoorFxHiddenChange={handleDoorFxHiddenChange}
+					onDoorFxScaleChange={handleDoorFxScaleChange}
 					onInteractionModeChange={setDevInteractionMode}
 					onLayerVisibilityChange={updateLayerVisibility}
 					onModeChange={handleDevModeChange}
@@ -2692,6 +2918,7 @@ export function TownPortfolio({
 					onResetBackground={resetActiveBackgroundDrafts}
 					onUndoActive={undoDevPoint}
 					open={devToolOpen}
+					isNightTheme={dayPhase === "night"}
 					stops={stops}
 					selectedStopId={devSelectedStopId}
 					setActiveRegionId={setDevRegionId}

@@ -6,7 +6,7 @@ import {
 } from "@/lib/portfolio-content";
 import type { DevLayerVisibility, DevToolMode } from "./map-dev-tool";
 import { clamp } from "./town-map-utils";
-import type { FacingDirection } from "./town-map-overlay";
+import type { FacingDirection } from "./town-map-overlay-types";
 
 export const ACTIVE_BACKGROUND_STORAGE_KEY = "pokemon-town-active-background";
 export const DEV_DRAFT_STORAGE_KEY = "pokemon-town-dev-drafts";

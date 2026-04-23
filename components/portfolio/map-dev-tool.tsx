@@ -15,7 +15,9 @@ export type DevToolMode =
 	| "stop-outline"
 	| "stop-info"
 	| "stop-door"
-	| "stop-exit";
+	| "stop-exit"
+	| "effect-door"
+	| "effect-water";
 
 export type DevInteractionMode = "view" | "capture" | "move";
 
@@ -41,7 +43,22 @@ export type DevStopDraft = Partial<{
 	exit: Position;
 }>;
 
+export type DevDoorFxDraft = {
+	anchor: Position;
+	hidden?: boolean;
+	scale?: number;
+};
+
+export type DevEffectDrafts = {
+	doorFx: Partial<Record<StopId, DevDoorFxDraft>>;
+	waterArea?: {
+		start: Position;
+		end: Position;
+	};
+};
+
 export type DevMapDrafts = {
+	effects: DevEffectDrafts;
 	polygons: DevPolygonDraft[];
 	stops: Partial<Record<StopId, DevStopDraft>>;
 };
@@ -226,6 +243,42 @@ const DEFAULT_BACKGROUND_POLYGONS: DevPolygonDraft[] = [
 ];
 
 const BACKGROUND_2_SEED_DRAFTS: DevMapDrafts = {
+	effects: {
+		doorFx: {
+			games: {
+				anchor: {
+					x: 661.6719360351562,
+					y: 618.0250854492188,
+				},
+				hidden: true,
+				scale: 1,
+			},
+			projects: {
+				anchor: {
+					x: 704.0238037109375,
+					y: 339.4126892089844,
+				},
+				hidden: false,
+				scale: 1.5,
+			},
+			contact: {
+				anchor: {
+					x: 343.3650817871094,
+					y: 563.506591796875,
+				},
+				hidden: true,
+				scale: 1,
+			},
+			about: {
+				anchor: {
+					x: 362.6666564941406,
+					y: 341.3809509277344,
+				},
+				hidden: false,
+				scale: 1.5,
+			},
+		},
+	},
 	polygons: [
 		{
 			id: "walkable-1",
@@ -251,7 +304,7 @@ const BACKGROUND_2_SEED_DRAFTS: DevMapDrafts = {
 				{ x: 466.62432861328125, y: 339.97882080078125 },
 				{ x: 470.6878356933594, y: 173.3756561279297 },
 			],
-			door: { x: 362.3280334472656, y: 319.3584289550781 },
+			door: { x: 365.03704833984375, y: 337.1158752441406 },
 			exit: { x: 361.6507873535156, y: 364.05682373046875 },
 		},
 		projects: {
@@ -350,6 +403,14 @@ const MODE_DESCRIPTIONS: Record<DevToolMode, { title: string; body: string }> = 
 		title: "Exit Node",
 		body: "This is the spawn point after closing a room. Keep it on a sensible piece of walkable ground just outside the building.",
 	},
+	"effect-door": {
+		title: "Door FX Anchor",
+		body: "This controls the visual door sprite placement separately from the actual travel door node.",
+	},
+	"effect-water": {
+		title: "Water FX Area",
+		body: "Define the rectangle used for the fountain water animation overlay. Capture two corners, then drag to refine.",
+	},
 };
 
 const INTERACTION_DESCRIPTIONS: Record<
@@ -426,8 +487,63 @@ function formatPositions(points: Position[]) {
 	return `[\n${points.map((point) => `\t${formatPosition(point)},`).join("\n")}\n]`;
 }
 
+function isPositionLike(value: unknown): value is Position {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as Position).x === "number" &&
+		typeof (value as Position).y === "number"
+	);
+}
+
+function normalizeDoorFxDraft(value: unknown): DevDoorFxDraft | undefined {
+	if (isPositionLike(value)) {
+		return {
+			anchor: value,
+			hidden: false,
+			scale: 1,
+		};
+	}
+
+	if (typeof value !== "object" || value === null) {
+		return undefined;
+	}
+
+	const anchor = (value as DevDoorFxDraft).anchor;
+
+	if (!isPositionLike(anchor)) {
+		return undefined;
+	}
+
+	const scale = typeof (value as DevDoorFxDraft).scale === "number"
+		? Math.min(Math.max((value as DevDoorFxDraft).scale!, 0.35), 3)
+		: 1;
+	const hidden =
+		typeof (value as DevDoorFxDraft).hidden === "boolean"
+			? (value as DevDoorFxDraft).hidden
+			: false;
+
+	return {
+		anchor,
+		hidden,
+		scale,
+	};
+}
+
+function formatDoorFxSummary(stopId: StopId, doorFx: DevDoorFxDraft) {
+	const hiddenLabel = doorFx.hidden ? "hidden" : "visible";
+	return `Door FX for ${stopId}: ${formatPosition(doorFx.anchor)}, ${Math.round((doorFx.scale ?? 1) * 100)}% scale, ${hiddenLabel}`;
+}
+
+function formatDoorFxSnippet(stopId: StopId, doorFx: DevDoorFxDraft) {
+	return `effects: {\n\tdoorFx: {\n\t\t${stopId}: {\n\t\t\tanchor: ${formatPosition(doorFx.anchor)},\n\t\t\tscale: ${Number((doorFx.scale ?? 1).toFixed(2))},\n\t\t\thidden: ${Boolean(doorFx.hidden)},\n\t\t},\n\t}\n}`;
+}
+
 export function createEmptyDevDrafts(): DevMapDrafts {
 	return {
+		effects: {
+			doorFx: {},
+		},
 		polygons: [],
 		stops: {},
 	};
@@ -438,6 +554,13 @@ export function createSeedDevDrafts(
 ): DevMapDrafts {
 	if (backgroundId === "background") {
 		return {
+			effects: {
+				doorFx: {},
+				waterArea: {
+					start: { x: 164, y: 518 },
+					end: { x: 284, y: 632 },
+				},
+			},
 			polygons: DEFAULT_BACKGROUND_POLYGONS.map((entry) => ({
 				...entry,
 				points: entry.points.map((point) => ({ ...point })),
@@ -448,6 +571,26 @@ export function createSeedDevDrafts(
 
 	if (backgroundId === "background-2") {
 		return {
+			effects: {
+				doorFx: Object.fromEntries(
+					Object.entries(BACKGROUND_2_SEED_DRAFTS.effects.doorFx).map(
+						([stopId, doorFx]) => [
+							stopId,
+							{
+								anchor: { ...doorFx.anchor },
+								hidden: doorFx.hidden ?? false,
+								scale: doorFx.scale ?? 1,
+							},
+						],
+					),
+				) as DevEffectDrafts["doorFx"],
+				waterArea: BACKGROUND_2_SEED_DRAFTS.effects.waterArea
+					? {
+							start: { ...BACKGROUND_2_SEED_DRAFTS.effects.waterArea.start },
+							end: { ...BACKGROUND_2_SEED_DRAFTS.effects.waterArea.end },
+						}
+					: undefined,
+			},
 			polygons: BACKGROUND_2_SEED_DRAFTS.polygons.map((entry) => ({
 				...entry,
 				points: entry.points.map((point) => ({ ...point })),
@@ -472,6 +615,39 @@ export function createSeedDevDrafts(
 	return createEmptyDevDrafts();
 }
 
+export function normalizeDevDrafts(
+	drafts: Partial<DevMapDrafts> | null | undefined,
+	backgroundId: TownMapBackgroundId = defaultTownMapBackgroundId,
+): DevMapDrafts {
+	const seededDrafts = createSeedDevDrafts(backgroundId);
+	const effects = drafts?.effects;
+	const waterArea = effects?.waterArea;
+	const normalizedDoorFx = Object.fromEntries(
+		Object.entries(effects?.doorFx ?? seededDrafts.effects.doorFx).flatMap(
+			([stopId, value]) => {
+				const normalized = normalizeDoorFxDraft(value);
+				return normalized ? [[stopId, normalized]] : [];
+			},
+		),
+	) as DevEffectDrafts["doorFx"];
+
+	return {
+		effects: {
+			doorFx: normalizedDoorFx,
+			waterArea:
+				waterArea &&
+				typeof waterArea.start?.x === "number" &&
+				typeof waterArea.start?.y === "number" &&
+				typeof waterArea.end?.x === "number" &&
+				typeof waterArea.end?.y === "number"
+					? waterArea
+					: seededDrafts.effects.waterArea,
+		},
+		polygons: drafts?.polygons ?? seededDrafts.polygons,
+		stops: drafts?.stops ?? seededDrafts.stops,
+	};
+}
+
 export function MapDevTool({
 	activeBackgroundId,
 	activeRegionId,
@@ -486,6 +662,8 @@ export function MapDevTool({
 	onCopyAll,
 	onCreatePolygonZone,
 	onDeleteActivePolygonZone,
+	onDoorFxHiddenChange,
+	onDoorFxScaleChange,
 	onInteractionModeChange,
 	onLayerVisibilityChange,
 	onModeChange,
@@ -493,6 +671,7 @@ export function MapDevTool({
 	onResetBackground,
 	onUndoActive,
 	open,
+	isNightTheme,
 	stops,
 	selectedStopId,
 	setActiveRegionId,
@@ -511,6 +690,8 @@ export function MapDevTool({
 	onCopyAll: () => void;
 	onCreatePolygonZone: () => void;
 	onDeleteActivePolygonZone: () => void;
+	onDoorFxHiddenChange: (stopId: StopId, hidden: boolean) => void;
+	onDoorFxScaleChange: (stopId: StopId, scale: number) => void;
 	onInteractionModeChange: (nextMode: DevInteractionMode) => void;
 	onLayerVisibilityChange: <K extends keyof DevLayerVisibility>(
 		layer: K,
@@ -521,6 +702,7 @@ export function MapDevTool({
 	onResetBackground: () => void;
 	onUndoActive: () => void;
 	open: boolean;
+	isNightTheme: boolean;
 	stops: { id: StopId }[];
 	selectedStopId: StopId;
 	setActiveRegionId: (nextId: string) => void;
@@ -537,10 +719,14 @@ export function MapDevTool({
 	const visibleLayers = useMemo(() => getRelevantLayers(mode), [mode]);
 	const modeDescription = MODE_DESCRIPTIONS[mode];
 	const interactionDescription = INTERACTION_DESCRIPTIONS[interactionMode];
+	const selectedDoorFx = mode === "effect-door" ? drafts.effects.doorFx[selectedStopId] : undefined;
 
 	const activeSummary = useMemo(() => {
 		if (mode === "all") {
-			return `${drafts.polygons.length} polygon zones, ${Object.keys(drafts.stops).length} customized stops`;
+			const effectCount =
+				Object.keys(drafts.effects.doorFx).length +
+				(drafts.effects.waterArea ? 1 : 0);
+			return `${drafts.polygons.length} polygon zones, ${Object.keys(drafts.stops).length} customized stops, ${effectCount} FX drafts`;
 		}
 
 		if (isPolygonMode(mode)) {
@@ -574,10 +760,22 @@ export function MapDevTool({
 				: `No door point for ${selectedStopId}`;
 		}
 
+		if (mode === "effect-door") {
+			return selectedDoorFx
+				? formatDoorFxSummary(selectedStopId, selectedDoorFx)
+				: `No door FX anchor for ${selectedStopId}`;
+		}
+
+		if (mode === "effect-water") {
+			return drafts.effects.waterArea
+				? `Water FX from ${formatPosition(drafts.effects.waterArea.start)} to ${formatPosition(drafts.effects.waterArea.end)}`
+				: "No water FX area";
+		}
+
 		return stopDraft?.exit
 			? `Exit for ${selectedStopId}: ${formatPosition(stopDraft.exit)}`
 			: `No exit point for ${selectedStopId}`;
-	}, [activeRegionId, drafts, mode, selectedStopId]);
+	}, [activeRegionId, drafts, mode, selectedDoorFx, selectedStopId]);
 
 	const activeSnippet = useMemo(() => {
 		if (mode === "all") {
@@ -620,10 +818,22 @@ export function MapDevTool({
 				: `// Click the map to place the ${selectedStopId} door.`;
 		}
 
+		if (mode === "effect-door") {
+			return selectedDoorFx
+				? formatDoorFxSnippet(selectedStopId, selectedDoorFx)
+				: `// Click the map to place the ${selectedStopId} door FX anchor.`;
+		}
+
+		if (mode === "effect-water") {
+			return drafts.effects.waterArea
+				? `effects: {\n\twaterArea: {\n\t\tstart: ${formatPosition(drafts.effects.waterArea.start)},\n\t\tend: ${formatPosition(drafts.effects.waterArea.end)},\n\t}\n}`
+				: "// Click the map twice to define the water FX area.";
+		}
+
 		return stopDraft?.exit
 			? `${selectedStopId}: {\n\texit: ${formatPosition(stopDraft.exit)},\n}`
 			: `// Click the map to place the ${selectedStopId} exit.`;
-	}, [activeRegionId, drafts, mode, selectedStopId]);
+	}, [activeRegionId, drafts, mode, selectedDoorFx, selectedStopId]);
 
 	if (!open) {
 		return null;
@@ -636,7 +846,7 @@ export function MapDevTool({
 			onClick={() => onOpenChange(false)}
 		>
 			<section
-				className="pokedex-box flex w-[min(800px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),960px)] flex-col gap-6 overflow-auto p-5 scrollbar-thin sm:p-8"
+				className={`pokedex-box flex w-[min(800px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),960px)] flex-col gap-6 overflow-auto p-5 scrollbar-thin sm:p-8 ${isNightTheme ? "night-ui" : ""}`}
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="dev-map-tool-title"
@@ -685,6 +895,8 @@ export function MapDevTool({
 							<option value="stop-info">Stop Info Anchor</option>
 							<option value="stop-door">Stop Door</option>
 							<option value="stop-exit">Stop Exit</option>
+							<option value="effect-door">Door FX Anchor</option>
+							<option value="effect-water">Water FX Area</option>
 						</select>
 					</label>
 
@@ -772,21 +984,63 @@ export function MapDevTool({
 								/>
 							</label>
 						</div>
+					) : mode === "effect-water" ? (
+						<div className="pixel-card bg-white/40 p-4 text-base leading-snug text-ink-soft sm:text-lg">
+							Water FX uses two captured corners for a single rectangle. Click once for the first corner, click again for the opposite corner, then switch to move mode to refine it.
+						</div>
 					) : (
-						<label className="flex flex-col gap-2">
-							<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Stop</span>
-							<select
-								className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
-								value={selectedStopId}
-								onChange={(event) => setSelectedStopId(event.target.value as StopId)}
-							>
-								{stops.map((stop) => (
-									<option key={stop.id} value={stop.id}>
-										{stop.id}
-									</option>
-								))}
-							</select>
-						</label>
+						<div className="flex flex-col gap-4">
+							<label className="flex flex-col gap-2">
+								<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Stop</span>
+								<select
+									className="pixel-card bg-white p-3 font-dot-gothic text-lg outline-none focus:border-accent"
+									value={selectedStopId}
+									onChange={(event) => setSelectedStopId(event.target.value as StopId)}
+								>
+									{stops.map((stop) => (
+										<option key={stop.id} value={stop.id}>
+											{stop.id}
+										</option>
+									))}
+								</select>
+							</label>
+							{mode === "effect-door" ? (
+								<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+									<label className="pixel-card flex flex-col gap-2 bg-white/40 p-3">
+										<span className="font-dot-gothic text-sm uppercase tracking-wider text-ink-soft">Door scale</span>
+										<input
+											type="range"
+											min="0.35"
+											max="3"
+											step="0.05"
+											value={selectedDoorFx?.scale ?? 1}
+											onChange={(event) =>
+												onDoorFxScaleChange(
+													selectedStopId,
+													Number(event.target.value),
+												)
+											}
+										/>
+										<span className="text-sm text-ink-soft">
+											{Math.round((selectedDoorFx?.scale ?? 1) * 100)}%
+										</span>
+									</label>
+									<label className="pixel-card flex items-center gap-3 bg-white/40 p-3">
+										<input
+											className="h-5 w-5 accent-accent"
+											type="checkbox"
+											checked={selectedDoorFx?.hidden ?? false}
+											onChange={(event) =>
+												onDoorFxHiddenChange(selectedStopId, event.target.checked)
+											}
+										/>
+										<span className="font-dot-gothic text-sm uppercase tracking-tight">
+											Hide door sprite
+										</span>
+									</label>
+								</div>
+							) : null}
+						</div>
 					)}
 
 					<div className="flex flex-col gap-4">

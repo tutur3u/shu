@@ -33,7 +33,7 @@ export function PortfolioStopPanel({
 				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Profile Snapshot</p>
-						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+						<span className="pixel-button stop-panel-status-chip bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							{content.profile.title}
 						</span>
 					</div>
@@ -59,10 +59,10 @@ export function PortfolioStopPanel({
 
 				<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 					{content.about.sections.map((section) => (
-						<section className="pixel-card flex flex-col gap-4 bg-panel-strong/50 p-6" key={section.title}>
+						<section className="pixel-card stop-panel-focus-card flex flex-col gap-4 bg-panel-strong/50 p-6" key={section.title}>
 							<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 								<p className="pixel-eyebrow">{section.title}</p>
-								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
+								<span className="pixel-button stop-panel-accent-chip bg-accent px-3 py-1 font-dot-gothic text-xs lowercase shadow-none!">
 									Focus
 								</span>
 							</div>
@@ -85,7 +85,7 @@ export function PortfolioStopPanel({
 				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Flagship Work</p>
-						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+						<span className="pixel-button stop-panel-status-chip bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							Curated Board
 						</span>
 					</div>
@@ -143,7 +143,7 @@ export function PortfolioStopPanel({
 				<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<p className="pixel-eyebrow">Next Move</p>
-						<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+						<span className="pixel-button stop-panel-status-chip bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
 							Open Channels
 						</span>
 					</div>
@@ -172,7 +172,7 @@ export function PortfolioStopPanel({
 				<div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
 					{content.contact.map((entry) => (
 						<a
-							className="pixel-card flex flex-col gap-2 bg-panel-strong p-6 transition-all hover:border-accent hover:bg-white"
+							className="pixel-card stop-panel-link-card flex flex-col gap-2 bg-panel-strong p-6 transition-all hover:border-accent hover:bg-white"
 							href={entry.href}
 							key={entry.href}
 							target="_blank"
@@ -193,9 +193,9 @@ export function PortfolioStopPanel({
 			<section className="pokedex-box flex flex-col gap-6 p-5 sm:p-8">
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<p className="pixel-eyebrow">Studio Preview</p>
-					<span className="pixel-button bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
-						Curator View
-					</span>
+						<span className="pixel-button stop-panel-status-chip bg-line px-3 py-1 font-dot-gothic text-xs lowercase text-white shadow-none!">
+							Curator View
+						</span>
 				</div>
 				<div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_auto]">
 					<div className="flex flex-col gap-4">

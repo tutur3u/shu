@@ -194,7 +194,7 @@ export function GameShelf({
 							<p className="pixel-eyebrow">Arcade Picker</p>
 							<h4 className="m-0 font-dot-gothic text-xl sm:text-2xl">Choose A Build</h4>
 						</div>
-						<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
+						<span className="pixel-button game-shelf-status-chip bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
 							Keyboard Ready
 						</span>
 					</div>
@@ -202,7 +202,7 @@ export function GameShelf({
 					<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 						<div className="flex flex-wrap gap-2" id={helperId}>
 							{["↑↓ Move", "Home/End Jump", "Type Search", "Enter Launch"].map((hint) => (
-								<span className="inline-flex items-center justify-center border-2 border-line/10 bg-white px-3 py-1 font-dot-gothic text-xs uppercase" key={hint}>
+								<span className="game-shelf-hint-chip inline-flex items-center justify-center border-2 border-line/10 bg-white px-3 py-1 font-dot-gothic text-xs uppercase" key={hint}>
 									{hint}
 								</span>
 							))}
@@ -246,9 +246,9 @@ export function GameShelf({
 											optionRefs.current[index] = node;
 										}}
 										aria-selected={isSelected}
-										className={`flex w-full items-center gap-3 border-4 bg-panel px-4 py-4 text-left transition-all sm:gap-4 ${
+										className={`game-shelf-option flex w-full items-center gap-3 border-4 bg-panel px-4 py-4 text-left transition-all sm:gap-4 ${
 											isSelected
-												? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
+												? "game-shelf-option--selected border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
 												: "border-line-soft/20 hover:border-line/20"
 										}`}
 										onClick={() => moveSelection(index)}
@@ -258,14 +258,14 @@ export function GameShelf({
 										tabIndex={isSelected ? 0 : -1}
 										type="button"
 									>
-										<span className={`flex h-12 w-12 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-base ${isSelected ? 'bg-white' : 'bg-sky'}`}>
+										<span className={`game-shelf-index-badge flex h-12 w-12 shrink-0 items-center justify-center border-4 border-line font-dot-gothic text-base ${isSelected ? 'bg-white' : 'bg-sky'}`}>
 											{String(index + 1).padStart(2, "0")}
 										</span>
 										<span className="flex min-w-0 flex-col gap-1">
 											<span className="flex items-center gap-3">
 												<strong className="truncate text-lg leading-tight sm:text-xl">{entry.title}</strong>
 												{isSelected && (
-													<span className="inline-flex items-center justify-center bg-black/10 px-2 py-0.5 font-dot-gothic text-xs uppercase">
+													<span className="game-shelf-selected-chip inline-flex items-center justify-center bg-black/10 px-2 py-0.5 font-dot-gothic text-xs uppercase">
 														Selected
 													</span>
 												)}
@@ -290,7 +290,7 @@ export function GameShelf({
 							<p className="pixel-eyebrow">Now Highlighted</p>
 							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 								<h4 className="m-0 font-dot-gothic text-2xl leading-tight sm:text-3xl">{selectedEntry.title}</h4>
-								<span className="pixel-button bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
+								<span className="pixel-button game-shelf-meta-chip bg-accent px-3 py-1 font-dot-gothic text-sm lowercase shadow-none!">
 									{selectedEntry.meta}
 								</span>
 							</div>
@@ -311,7 +311,7 @@ export function GameShelf({
 							{ label: "Category", value: selectedEntry.category },
 							{ label: "Primary Link", value: primaryLink?.label ?? "Unavailable" }
 						].map((item) => (
-							<div className="pixel-card flex flex-col gap-1 bg-white/60 p-4" key={item.label}>
+							<div className="pixel-card game-shelf-stat-card flex flex-col gap-1 bg-white/60 p-4" key={item.label}>
 								<span className="font-dot-gothic text-[10px] uppercase tracking-widest text-ink-soft">
 									{item.label}
 								</span>
@@ -330,7 +330,7 @@ export function GameShelf({
 
 						<div className="grid gap-4">
 							{selectedEntry.highlights.map((highlight, index) => (
-								<article className="pixel-card grid grid-cols-[50px_1fr] items-start gap-4 bg-white/60 p-4" key={highlight}>
+								<article className="pixel-card game-shelf-highlight-card grid grid-cols-[50px_1fr] items-start gap-4 bg-white/60 p-4" key={highlight}>
 									<span className="font-dot-gothic text-xs text-ink-soft">
 										{String(index + 1).padStart(2, "0")}
 									</span>
@@ -356,7 +356,7 @@ export function GameShelf({
 							<div className="flex flex-wrap gap-4">
 								{secondaryLinks.map((link) => (
 									<a
-										className="pixel-button inline-flex flex-1 items-center justify-center bg-white px-6 py-3 text-base sm:text-lg"
+										className="pixel-button game-shelf-secondary-link inline-flex flex-1 items-center justify-center bg-white px-6 py-3 text-base sm:text-lg"
 										href={link.url}
 										key={link.url}
 										target="_blank"
@@ -369,7 +369,7 @@ export function GameShelf({
 						)}
 
 						<p className="m-0 text-center font-dot-gothic text-sm text-ink-soft">
-							Press <kbd className="mx-1 border-2 border-line/10 bg-white px-2 py-0.5 align-middle">Enter</kbd> from the picker to launch.
+							Press <kbd className="game-shelf-kbd mx-1 border-2 border-line/10 bg-white px-2 py-0.5 align-middle">Enter</kbd> from the picker to launch.
 						</p>
 					</div>
 				</section>

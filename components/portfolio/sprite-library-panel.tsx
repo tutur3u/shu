@@ -78,17 +78,20 @@ function AnimatedSpritePreview({
 }
 
 function FullscreenSpriteViewer({
+	isNightTheme,
 	onClose,
 	onModeChange,
 	onSelectionStep,
 	selection,
 }: {
+	isNightTheme: boolean;
 	onClose: () => void;
 	onModeChange: (modeIndex: number) => void;
 	onSelectionStep: (direction: 1 | -1) => void;
 	selection: LibrarySelection;
 }) {
 	const config = getSheetPreviewConfig(selection.asset);
+	const hasModeNavigation = Boolean(config && config.modes.length > 1);
 	const activeMode = config?.modes[selection.modeIndex] ?? null;
 	const assetIndex = Math.max(
 		0,
@@ -97,30 +100,24 @@ function FullscreenSpriteViewer({
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (!config) {
-				if (event.key === "ArrowUp" || event.key === "PageUp") {
-					event.preventDefault();
-					onSelectionStep(-1);
-				}
-
-				if (event.key === "ArrowDown" || event.key === "PageDown") {
-					event.preventDefault();
-					onSelectionStep(1);
-				}
-
-				return;
-			}
-
 			switch (event.key) {
 				case "ArrowLeft":
 					event.preventDefault();
-					onModeChange(
-						(selection.modeIndex - 1 + config.modes.length) % config.modes.length,
-					);
+					if (hasModeNavigation && config) {
+						onModeChange(
+							(selection.modeIndex - 1 + config.modes.length) % config.modes.length,
+						);
+						return;
+					}
+					onSelectionStep(-1);
 					return;
 				case "ArrowRight":
 					event.preventDefault();
-					onModeChange((selection.modeIndex + 1) % config.modes.length);
+					if (hasModeNavigation && config) {
+						onModeChange((selection.modeIndex + 1) % config.modes.length);
+						return;
+					}
+					onSelectionStep(1);
 					return;
 				case "ArrowUp":
 				case "PageUp":
@@ -133,12 +130,16 @@ function FullscreenSpriteViewer({
 					onSelectionStep(1);
 					return;
 				case "Home":
-					event.preventDefault();
-					onModeChange(0);
+					if (hasModeNavigation && config) {
+						event.preventDefault();
+						onModeChange(0);
+					}
 					return;
 				case "End":
-					event.preventDefault();
-					onModeChange(config.modes.length - 1);
+					if (hasModeNavigation && config) {
+						event.preventDefault();
+						onModeChange(config.modes.length - 1);
+					}
 					return;
 				default:
 					return;
@@ -147,7 +148,7 @@ function FullscreenSpriteViewer({
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [config, onModeChange, onSelectionStep, selection.modeIndex]);
+	}, [config, hasModeNavigation, onModeChange, onSelectionStep, selection.modeIndex]);
 
 	return (
 		<div
@@ -156,7 +157,7 @@ function FullscreenSpriteViewer({
 			onClick={onClose}
 		>
 			<section
-				className="pokedex-box fullscreen-sprite-viewer flex w-[min(1280px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),940px)] flex-col gap-5 overflow-hidden p-5 sm:p-8"
+				className={`pokedex-box fullscreen-sprite-viewer flex w-[min(1280px,calc(100vw-1rem))] max-h-[min(calc(100dvh-1rem),940px)] flex-col gap-5 overflow-hidden p-5 sm:p-8 ${isNightTheme ? "night-ui" : ""}`}
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="fullscreen-sprite-title"
@@ -239,7 +240,11 @@ function FullscreenSpriteViewer({
 
 						<div className="fullscreen-sprite-viewer__hintbar">
 							<span>Esc back to library</span>
-							<span>&larr;/&rarr; switch mode</span>
+							<span>
+								{hasModeNavigation
+									? "←/→ switch mode"
+									: "←/→ switch item"}
+							</span>
 							<span>&uarr;/&darr; switch item</span>
 						</div>
 					</div>
@@ -368,9 +373,11 @@ function PaletteSwatchCard({
 }
 
 export function SpriteLibraryPanel({
+	isNightTheme,
 	onSelectionChange,
 	selection,
 }: {
+	isNightTheme: boolean;
 	onSelectionChange: (selection: LibrarySelection | null) => void;
 	selection: LibrarySelection | null;
 }) {
@@ -522,9 +529,10 @@ export function SpriteLibraryPanel({
 			</section>
 
 			{selection ? (
-				<FullscreenSpriteViewer
-					selection={selection}
-					onClose={() => onSelectionChange(null)}
+			<FullscreenSpriteViewer
+				isNightTheme={isNightTheme}
+				selection={selection}
+				onClose={() => onSelectionChange(null)}
 					onModeChange={(modeIndex) =>
 						onSelectionChange({ ...selection, modeIndex })
 					}

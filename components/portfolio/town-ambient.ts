@@ -2,9 +2,11 @@ import type { Position, TownMapBackgroundId } from "@/lib/portfolio-content";
 import { defaultTownMapBackgroundId } from "@/lib/portfolio-content";
 import {
 	OVERWORLD_AMBIENT_SPRITES,
-	type AmbientSpriteActor,
-	type FacingDirection,
-} from "./town-map-overlay";
+} from "./town-map-overlay-sprites";
+import type {
+	AmbientSpriteActor,
+	FacingDirection,
+} from "./town-map-overlay-types";
 
 export type AmbientActorState = AmbientSpriteActor & {
 	conversationCooldownRemainingMs: number;

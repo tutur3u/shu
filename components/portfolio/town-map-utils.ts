@@ -21,6 +21,14 @@ export type DragTarget =
 			type: "stop-anchor";
 			stopId: StopId;
 			anchor: "infoAnchor" | "door" | "exit";
+	  }
+	| {
+			type: "effect-door-anchor";
+			stopId: StopId;
+	  }
+	| {
+			type: "effect-water-corner";
+			corner: "start" | "end";
 	  };
 
 export function clamp(value: number, min: number, max: number) {
@@ -80,6 +88,10 @@ export function getRelevantLayerKeys(
 
 	if (mode === "stop-outline") {
 		return ["stopOutlines", "pointHandles"];
+	}
+
+	if (mode === "effect-water") {
+		return ["stopOutlines", "stopAnchors", "pointHandles"];
 	}
 
 	return ["stopOutlines", "stopAnchors"];

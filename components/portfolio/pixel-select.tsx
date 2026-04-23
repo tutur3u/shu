@@ -158,8 +158,8 @@ export function PixelSelect({
 				</div>
 				<h3 className="font-dot-gothic text-3xl leading-tight sm:text-4xl">{selectedEntry.title}</h3>
 				<p className="m-0 text-lg leading-relaxed sm:text-2xl">{selectedEntry.blurb}</p>
-				<p className="mt-4 border-l-6 border-accent bg-black/5 p-4 text-base leading-relaxed text-ink-soft sm:text-xl">
-					{description} Launch with <kbd className="mx-2 inline-block border-2 border-line-soft bg-white px-2 align-middle font-dot-gothic text-base">Enter</kbd>.
+				<p className="pixel-select-note mt-4 border-l-6 border-accent bg-black/5 p-4 text-base leading-relaxed text-ink-soft sm:text-xl">
+					{description} Launch with <kbd className="pixel-select-kbd mx-2 inline-block border-2 border-line-soft bg-white px-2 align-middle font-dot-gothic text-base">Enter</kbd>.
 				</p>
 				<div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
 					{[
@@ -228,9 +228,9 @@ export function PixelSelect({
 											onClick={() => moveSelection(index)}
 											onFocus={() => setSelectedIndex(index)}
 											onKeyDown={(event) => handleOptionKeyDown(index, event)}
-											className={`flex w-full items-center gap-3 border-4 px-4 py-4 text-left transition-all sm:gap-5 sm:px-6 ${
+											className={`pixel-select-option flex w-full items-center gap-3 border-4 px-4 py-4 text-left transition-all sm:gap-5 sm:px-6 ${
 												isSelected
-													? "border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
+													? "pixel-select-option--selected border-line bg-accent shadow-[4px_4px_0_rgba(0,0,0,0.1)]"
 													: "border-transparent bg-panel-strong/40 hover:border-line/20"
 											}`}
 										>
@@ -260,7 +260,7 @@ export function PixelSelect({
 							<p className="font-dot-gothic text-base text-ink-soft uppercase tracking-wide sm:text-xl">{selectedEntry.role}</p>
 						</div>
 						{selectedEntry.featured ? (
-							<span className="pixel-button bg-accent px-4 py-1 font-dot-gothic text-sm shadow-none!">
+							<span className="pixel-button pixel-select-featured-chip bg-accent px-4 py-1 font-dot-gothic text-sm shadow-none!">
 								Featured
 							</span>
 						) : null}
