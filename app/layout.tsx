@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { DotGothic16 } from "next/font/google";
+import { NuqsProvider } from "@/components/nuqs-provider";
 import "./globals.css";
 
 const dotGothic = DotGothic16({
@@ -29,8 +30,10 @@ export default function RootLayout({
 			className={`${dotGothic.variable} h-full`}
 		>
 			<body className={`${dotGothic.className} min-h-full`}>
-				<Analytics />
-				{children}
+				<NuqsProvider>
+					<Analytics />
+					{children}
+				</NuqsProvider>
 			</body>
 		</html>
 	);

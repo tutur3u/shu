@@ -6,6 +6,11 @@ export type PortfolioAsset = {
 	tag: string;
 };
 
+export type PaletteSwatch = {
+	name: string;
+	hex: string;
+};
+
 const createAsset = (
 	title: string,
 	src: string,
@@ -230,3 +235,26 @@ export const portfolioAssetTotal =
 	mapAssets.length +
 	referenceAssets.length +
 	tileAssets.length;
+
+export const pokemonPalette = [
+	{ name: "Ink", hex: "#000000" },
+	{ name: "Paper", hex: "#F8F8F8" },
+	{ name: "Fire", hex: "#F80000" },
+	{ name: "Amber", hex: "#F88800" },
+	{ name: "Burnt Orange", hex: "#E07000" },
+	{ name: "Sun", hex: "#F8F800" },
+	{ name: "Leaf", hex: "#08B030" },
+	{ name: "Bud", hex: "#88F858" },
+	{ name: "Water", hex: "#0088F8" },
+	{ name: "Mist", hex: "#80D0F8" },
+	{ name: "Royal", hex: "#0008C8" },
+	{ name: "Iris", hex: "#8090F8" },
+	{ name: "Berry", hex: "#9800B0" },
+	{ name: "Lilac", hex: "#C878F8" },
+	{ name: "Signal", hex: "#F80030" },
+	{ name: "Bloom", hex: "#F87890" },
+	{ name: "Bark", hex: "#884828" },
+	{ name: "Clay", hex: "#E89050" },
+	{ name: "Olive", hex: "#585828" },
+	{ name: "Moss", hex: "#A0B850" },
+] as const satisfies readonly PaletteSwatch[];

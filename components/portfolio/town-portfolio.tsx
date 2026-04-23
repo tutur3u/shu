@@ -4,6 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRe
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import {
 	defaultTownMapBackgroundId,
 	getTownMapVariant,
@@ -40,6 +41,13 @@ import {
 	OVERWORLD_AMBIENT_SPRITE_IDS,
 } from "./town-ambient";
 import { PortfolioStopPanel } from "./portfolio-stop-panel";
+import { SpriteLibraryPanel } from "./sprite-library-panel";
+import {
+	clampSpriteLibraryMode,
+	getSpriteLibraryAssetBySlug,
+	getSpriteLibraryAssetSlug,
+	type LibrarySelection,
+} from "./sprite-library-data";
 import { OVERWORLD_AMBIENT_SPRITES, TownMapOverlay } from "./town-map-overlay";
 import {
 	ACTIVE_BACKGROUND_STORAGE_KEY,
@@ -76,6 +84,16 @@ export function TownPortfolio({
 	content: PortfolioContent;
 	stops: TownStop[];
 }) {
+	const [libraryQuery, setLibraryQuery] = useQueryStates(
+		{
+			asset: parseAsString,
+			library: parseAsStringLiteral(["open", "viewer"] as const),
+			mode: parseAsInteger,
+		},
+		{
+			history: "replace",
+		},
+	);
 	const ambientSpriteSeed = OVERWORLD_AMBIENT_SPRITES.map((sprite) => sprite.id).join("|");
 	const editorEnabled = true;
 	const defaultMapVariant = getTownMapVariant(defaultTownMapBackgroundId);
@@ -125,6 +143,22 @@ export function TownPortfolio({
 		() => getTownMapVariant(activeBackgroundId),
 		[activeBackgroundId],
 	);
+	const libraryOpen = libraryQuery.library !== null;
+	const librarySelection = useMemo<LibrarySelection | null>(() => {
+		if (libraryQuery.library !== "viewer") {
+			return null;
+		}
+
+		const asset = getSpriteLibraryAssetBySlug(libraryQuery.asset);
+		if (!asset) {
+			return null;
+		}
+
+		return {
+			asset,
+			modeIndex: clampSpriteLibraryMode(asset, libraryQuery.mode),
+		};
+	}, [libraryQuery.asset, libraryQuery.library, libraryQuery.mode]);
 
 	const travelFrameRef = useRef<number | null>(null);
 	const movementFrameRef = useRef<number | null>(null);
@@ -156,6 +190,45 @@ export function TownPortfolio({
 		pressedKeysRef.current.clear();
 		setTravelingTo(null);
 	}, [clearTimer, stopMovementLoop]);
+	const closeLibrary = useCallback(() => {
+		void setLibraryQuery({
+			asset: null,
+			library: null,
+			mode: null,
+		});
+	}, [setLibraryQuery]);
+	const openLibrary = useCallback(() => {
+		void setLibraryQuery({
+			asset: null,
+			library: "open",
+			mode: null,
+		});
+	}, [setLibraryQuery]);
+	const setLibrarySelection = useCallback((selection: LibrarySelection | null) => {
+		if (!selection) {
+			void setLibraryQuery({
+				asset: null,
+				library: "open",
+				mode: null,
+			});
+			return;
+		}
+
+		void setLibraryQuery({
+			asset: getSpriteLibraryAssetSlug(selection.asset),
+			library: "viewer",
+			mode: selection.modeIndex > 0 ? selection.modeIndex : null,
+		});
+	}, [setLibraryQuery]);
+	useEffect(() => {
+		if (libraryQuery.library === "viewer" && !librarySelection) {
+			void setLibraryQuery({
+				asset: null,
+				library: "open",
+				mode: null,
+			});
+		}
+	}, [libraryQuery.library, librarySelection, setLibraryQuery]);
 	const syncCharacterPosition = useCallback((nextPosition: Position) => {
 		setCharacterPosition(nextPosition);
 		positionRef.current = nextPosition;
@@ -173,6 +246,7 @@ export function TownPortfolio({
 		setDragTarget(null);
 		setHoveredStopId(null);
 		setActiveStopId(null);
+		closeLibrary();
 		setLastStopId(null);
 		setExitPassThroughStopId(null);
 		setCharacterVisible(true);
@@ -180,12 +254,13 @@ export function TownPortfolio({
 		syncCharacterPosition(position);
 		setDevDrafts(createSeedDevDrafts(backgroundId));
 		setDraftsHydrated(draftsHydrated);
-	}, [cancelCurrentMovement, syncCharacterPosition]);
+	}, [cancelCurrentMovement, closeLibrary, syncCharacterPosition]);
 	const prepareForPlayerTravel = useCallback(() => {
 		cancelCurrentMovement();
 		setGuideOpen(false);
+		closeLibrary();
 		setCharacterVisible(true);
-	}, [cancelCurrentMovement]);
+	}, [cancelCurrentMovement, closeLibrary]);
 	const availableBackgrounds = useMemo(
 		() =>
 			showLegacyBackground
@@ -2011,6 +2086,11 @@ export function TownPortfolio({
 			return;
 		}
 
+		if (librarySelection) {
+			setLibrarySelection(null);
+			return;
+		}
+
 		if (travelingTo || pathMoving || keyboardMoving) {
 			cancelCurrentMovement();
 			return;
@@ -2018,6 +2098,11 @@ export function TownPortfolio({
 
 		if (devToolOpen) {
 			setDevToolOpen(false);
+			return;
+		}
+
+		if (libraryOpen) {
+			closeLibrary();
 			return;
 		}
 
@@ -2039,6 +2124,7 @@ export function TownPortfolio({
 				isTypingTarget ||
 				devToolOpen ||
 				guideOpen ||
+				libraryOpen ||
 				activeStopId ||
 				travelingTo ||
 				(editorEnabled && devInteractionMode !== "view")
@@ -2116,6 +2202,7 @@ export function TownPortfolio({
 		devToolOpen,
 		editorEnabled,
 		guideOpen,
+		libraryOpen,
 		isNavigablePoint,
 		prefersReducedMotion,
 		resolveCharacterMovement,
@@ -2155,6 +2242,7 @@ export function TownPortfolio({
 			isTypingTarget ||
 			devToolOpen ||
 			guideOpen ||
+			libraryOpen ||
 			activeStopId ||
 			(editorEnabled && devInteractionMode !== "view")
 		) {
@@ -2245,6 +2333,13 @@ export function TownPortfolio({
 							>
 								Guide
 							</button>
+							<button
+								type="button"
+								className={`pixel-button min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm ${libraryOpen ? "pixel-button--active" : ""}`}
+								onClick={openLibrary}
+							>
+								Library
+							</button>
 							{availableBackgrounds.length > 1 ? (
 								<label className="pixel-card pointer-events-auto flex min-w-0 flex-[999_1_16rem] items-center gap-3 bg-white/85 px-3 py-2 sm:flex-[0_1_20rem] sm:px-4">
 									<span className="shrink-0 font-dot-gothic text-[10px] uppercase tracking-wider text-ink-soft sm:text-xs">
@@ -2270,7 +2365,7 @@ export function TownPortfolio({
 							{editorEnabled ? (
 								<button
 									type="button"
-									className="pixel-button min-h-[52px] flex-1 bg-sky px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
+									className="pixel-button pixel-button--sky min-h-[52px] flex-1 px-4 py-3 text-xs sm:min-h-0 sm:flex-none sm:px-6 sm:py-3 sm:text-sm"
 									onClick={() => setDevToolOpen(true)}
 								>
 									Map Editor
@@ -2482,6 +2577,46 @@ export function TownPortfolio({
 								);
 							})}
 						</div>
+					</section>
+				</div>
+			) : null}
+
+			{libraryOpen ? (
+				<div
+					className="fixed inset-0 z-20 grid place-items-center bg-black/45 p-4 backdrop-blur-sm sm:p-6"
+					role="presentation"
+					onClick={closeLibrary}
+				>
+					<section
+						className="pokedex-box flex w-[min(1400px,calc(100vw-1rem))] max-w-full max-h-[min(calc(100dvh-1rem),980px)] flex-col gap-5 overflow-x-hidden overflow-y-auto p-5 scrollbar-thin sm:gap-6 sm:p-8"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="library-dialog-title"
+						onClick={(event) => event.stopPropagation()}
+					>
+						<div className="flex flex-col gap-3 border-b border-line/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="pixel-eyebrow">Sprite Library</p>
+								<h2
+									className="m-0 font-dot-gothic text-xl leading-tight sm:text-2xl"
+									id="library-dialog-title"
+								>
+									Character sheets and shared palette
+								</h2>
+							</div>
+								<button
+								className="pixel-button w-full px-4 py-2 text-sm sm:w-auto"
+								type="button"
+								onClick={closeLibrary}
+							>
+								Close Library
+							</button>
+						</div>
+
+						<SpriteLibraryPanel
+							selection={librarySelection}
+							onSelectionChange={setLibrarySelection}
+						/>
 					</section>
 				</div>
 			) : null}
