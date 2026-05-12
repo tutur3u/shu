@@ -15,16 +15,18 @@ export function AdminDashboardShowcase({
 	contacts,
 	dashboard,
 	games,
+	initialUnlocked = false,
 	profile,
 	projects,
 }: {
 	contacts: ContactEntry[];
 	dashboard: DashboardContent;
 	games: ShowcaseEntry[];
+	initialUnlocked?: boolean;
 	profile: ProfileContent;
 	projects: ShowcaseEntry[];
 }) {
-	const [isUnlocked, setIsUnlocked] = useState(false);
+	const [isUnlocked, setIsUnlocked] = useState(initialUnlocked);
 	const [activeView, setActiveView] = useState<AdminView>("overview");
 	const [heroTitle, setHeroTitle] = useState(
 		"Game design work presented with a clear path, a playful wrapper, and a fast way into the strongest projects.",
