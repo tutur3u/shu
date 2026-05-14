@@ -1,4 +1,4 @@
-import { getShuApiBaseUrl, getShuAppId, getShuAppSecret } from "@/lib/shu-config";
+import { getShuApiBaseUrl, getShuAppId, getShuAppSecret, getShuWorkspaceId } from "@/lib/shu-config";
 import { setShuSessionCookie, type ShuAdminSession } from "@/lib/shu-session";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -12,6 +12,7 @@ type AppTokenExchangeResponse = {
 	error?: string;
 	expiresAt?: string;
 	tokenType?: string;
+	workspaceId?: string | null;
 	user?: {
 		email?: string | null;
 		id?: string;
@@ -45,6 +46,7 @@ async function exchangeCrossAppToken(token: string) {
 			appSecret: getShuAppSecret(),
 			requestedScopes: ["external-projects:*"],
 			token,
+			workspaceId: getShuWorkspaceId(),
 		}),
 		cache: "no-store",
 		headers: {
@@ -62,7 +64,7 @@ async function exchangeCrossAppToken(token: string) {
 }
 
 function toShuSession(payload: AppTokenExchangeResponse): ShuAdminSession {
-	if (!payload.accessToken || !payload.expiresAt || !payload.user?.id) {
+	if (!payload.accessToken || !payload.expiresAt || !payload.user?.id || !payload.workspaceId) {
 		throw new Error("Invalid Tuturuuu app token exchange response.");
 	}
 
@@ -73,6 +75,7 @@ function toShuSession(payload: AppTokenExchangeResponse): ShuAdminSession {
 		},
 		expiresAt: payload.expiresAt,
 		tokenType: "Bearer",
+		workspaceId: payload.workspaceId,
 		user: {
 			email: payload.user.email ?? null,
 			id: payload.user.id,
